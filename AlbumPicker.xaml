@@ -1,0 +1,42 @@
+﻿<Window x:Class="FlickrSlideshow.AlbumPicker"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Select Albums" Height="500" Width="400" Icon="/flickr.png">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Filter box -->
+            <RowDefinition Height="*"/>
+            <!-- Album list -->
+            <RowDefinition Height="Auto"/>
+            <!-- Buttons -->
+        </Grid.RowDefinitions>
+
+        <!-- Filter box -->
+        <TextBox x:Name="FilterBox"
+                 Grid.Row="0"
+                 Margin="0,0,0,10"
+                 TextChanged="FilterBox_TextChanged"/>
+
+        <!-- Album checklist -->
+        <ListBox x:Name="AlbumList"
+                 Grid.Row="1"
+                 SelectionMode="Multiple">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <CheckBox Content="{Binding Title}"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- OK/Cancel buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,10,0,0">
+            <Button Content="OK" Width="80" Margin="0,0,10,0" Click="Ok_Click"/>
+            <Button Content="Cancel" Width="80" Click="Cancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
