@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "FlickrSlideshow": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}

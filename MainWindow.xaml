@@ -7,15 +7,17 @@
         MinHeight="400"
         MinWidth="600"
         PreviewKeyDown="MainWindow_KeyDown"
-        KeyDown="MainWindow_KeyDown" Icon="/flickr.png">
-    
+        KeyDown="MainWindow_KeyDown" 
+        Icon="/flickr.png"
+        Focusable="True"
+        Background="LightGray"
+        FocusManager.FocusedElement="{Binding RelativeSource={RelativeSource Self}}">
 
-    <Grid>
+    <!-- SINGLE ROOT GRID -->
+    <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- Top controls -->
             <RowDefinition Height="*"/>
-            <!-- Slideshow -->
         </Grid.RowDefinitions>
 
         <!-- Top controls -->
@@ -50,20 +52,51 @@
                         Margin="0,0,10,0"
                         Click="AllPhotos_Click"
                         IsEnabled="False"/>
+
                 <Button x:Name="PickAlbumsButton"
                         Content="Pick Albums"
                         Width="120"
                         Click="Albums_Click"
                         IsEnabled="False"/>
+
+                <Button x:Name="ExploreButton"
+                        Content="Explore"
+                        Width="120"
+                        Margin="10,0,0,0"
+                        Click="Explore_Click"/>
             </StackPanel>
         </StackPanel>
 
-        <!-- Slideshow Image -->
-        <Border Grid.Row="1" Background="Black">
-            <Image x:Name="SlideImage"
-                   HorizontalAlignment="Stretch"
-                   VerticalAlignment="Stretch"
-                   Stretch="Uniform"/>
-        </Border>
+        <!-- Slideshow + overlay -->
+        <Grid Grid.Row="1">
+            <Border Background="Black">
+                <!-- ensure SlideImage will only be scaled down by WPF, never up -->
+                <Image x:Name="SlideImage"
+                       Stretch="Uniform"
+                       StretchDirection="DownOnly"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center" />
+            </Border>
+
+            <!-- Resume overlay (transparent so image stays visible when paused) -->
+            <Border x:Name="ResumeOverlay" Background="Transparent" Visibility="Collapsed">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="Slideshow Paused" Foreground="White" FontSize="24" HorizontalAlignment="Center"/>
+                    <Button x:Name="ResumeButton" Content="Resume" Width="120" Height="40" Margin="10" Click="ResumeButton_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Debug info (visible only in DEBUG build) -->
+            <TextBlock x:Name="DebugInfoText"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Bottom"
+                       Margin="10"
+                       Foreground="White"
+                       Background="#66000000"
+                       Padding="6,4"
+                       TextWrapping="Wrap"
+                       Visibility="Collapsed"
+                       FontSize="12"/>
+        </Grid>
     </Grid>
 </Window>

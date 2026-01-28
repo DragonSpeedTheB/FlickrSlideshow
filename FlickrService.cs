@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace FlickrSlideshow
 {
@@ -69,6 +70,7 @@ namespace FlickrSlideshow
 
         #region Private helpers
 
+        // Update LoadPhotosFromPeople to prefer sizes extras and fallback to sizes API when needed
         private async Task<List<FlickrPhoto>> LoadPhotosFromPeople(IProgress<int>? progress = null)
         {
             var photos = new List<FlickrPhoto>();
@@ -83,6 +85,8 @@ namespace FlickrSlideshow
                     $"&api_key={_apiKey}" +
                     $"&user_id={_userId}" +
                     $"&per_page=500" +
+                    // request size URLs so we can pick the largest available
+                    $"&extras=url_o,url_k,url_h,url_b,url_l" +
                     $"&page={page}" +
                     $"&format=json&nojsoncallback=1";
 
@@ -98,16 +102,102 @@ namespace FlickrSlideshow
                     var server = p.GetProperty("server").GetString();
                     var secret = p.GetProperty("secret").GetString();
 
-                    var urlImg = $"https://live.staticflickr.com/{server}/{id}_{secret}_b.jpg";
-                    photos.Add(new FlickrPhoto(urlImg));
+                    // Prefer the largest available URL from extras
+                    string? imageUrl =
+                        TryGet(p, "url_o") ??
+                        TryGet(p, "url_k") ??
+                        TryGet(p, "url_h") ??
+                        TryGet(p, "url_b") ??
+                        TryGet(p, "url_l");
 
-                    progress?.Report(photos.Count); // <-- report progress after each photo
+                    // If extras didn't include any or you want to ensure the absolute largest,
+                    // call the sizes API for this photo (more network work).
+                    if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(id))
+                    {
+                        var largest = await GetLargestPhotoUrlAsync(id);
+                        if (!string.IsNullOrEmpty(largest))
+                            imageUrl = largest;
+                    }
+
+                    // final fallback to constructed _b URL
+                    if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(secret))
+                        imageUrl = $"https://live.staticflickr.com/{server}/{id}_{secret}_b.jpg";
+
+                    if (!string.IsNullOrEmpty(imageUrl))
+                        photos.Add(new FlickrPhoto(imageUrl));
+
+                    progress?.Report(photos.Count);
                 }
 
                 page++;
             } while (page <= pages);
 
             return photos;
+        }
+        public async Task<List<FlickrPhoto>> GetExplorePhotos(int perPage)
+        {
+            var date = DateTime.Now.AddDays(Random.Shared.Next(-60, -1));
+            var parameters = new Dictionary<string, string>
+            {
+                ["method"] = "flickr.interestingness.getList",
+                ["per_page"] = perPage.ToString(),
+                ["extras"] = "url_h,url_l,url_o",
+                ["date"] = date.ToString("yyyy-MM-dd")
+            };
+
+            return await CallPhotos(parameters);
+        }
+        private async Task<List<FlickrPhoto>> CallPhotos(Dictionary<string, string> parameters)
+        {
+            var photos = new List<FlickrPhoto>();
+
+            parameters["api_key"] = _apiKey;
+            parameters["format"] = "json";
+            parameters["nojsoncallback"] = "1";
+            parameters["per_page"] = parameters.TryGetValue("per_page", out var pp) ? pp : "500";
+
+            int page = 1;
+            int pages = 1;
+
+            do
+            {
+                parameters["page"] = page.ToString();
+
+                var query = string.Join("&",
+                    parameters.Select(kvp => $"{kvp.Key}={Uri.EscapeDataString(kvp.Value)}"));
+
+                var requestUrl = $"https://api.flickr.com/services/rest/?{query}";
+                var json = await _http.GetStringAsync(requestUrl);
+
+                using var doc = JsonDocument.Parse(json);
+
+                var photosNode = doc.RootElement.GetProperty("photos");
+                pages = photosNode.GetProperty("pages").GetInt32();
+
+                foreach (var p in photosNode.GetProperty("photo").EnumerateArray())
+                {
+                    string? imageUrl =
+                        TryGet(p, "url_o") ??
+                        TryGet(p, "url_h") ??
+                        TryGet(p, "url_l");
+
+                    if (!string.IsNullOrEmpty(imageUrl))
+                        photos.Add(new FlickrPhoto(imageUrl));
+                }
+
+                page++;
+            }
+            while (page <= pages);
+
+            return photos;
+        }
+
+
+        private static string? TryGet(JsonElement element, string name)
+        {
+            return element.TryGetProperty(name, out var prop)
+                ? prop.GetString()
+                : null;
         }
 
 
@@ -126,6 +216,8 @@ namespace FlickrSlideshow
                     $"&photoset_id={albumId}" +
                     $"&user_id={_userId}" +
                     $"&per_page=500" +
+                    // request size URLs so we can pick the largest available
+                    $"&extras=url_o,url_k,url_h,url_b,url_l" +
                     $"&page={page}" +
                     $"&format=json&nojsoncallback=1";
 
@@ -150,8 +242,15 @@ namespace FlickrSlideshow
 
                         if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(secret))
                         {
-                            var urlImg = $"https://live.staticflickr.com/{server}/{id}_{secret}_b.jpg";
-                            photos.Add(new FlickrPhoto(urlImg));
+                            string? imageUrl =
+                                TryGet(p, "url_o") ??
+                                TryGet(p, "url_k") ??
+                                TryGet(p, "url_h") ??
+                                TryGet(p, "url_b") ??
+                                TryGet(p, "url_l") ??
+                                $"https://live.staticflickr.com/{server}/{id}_{secret}_b.jpg";
+
+                            photos.Add(new FlickrPhoto(imageUrl));
                         }
                     }
                 }
@@ -181,6 +280,44 @@ namespace FlickrSlideshow
             return doc.RootElement.GetProperty("user").GetProperty("nsid").GetString()!;
         }
 
+        // Add this helper to FlickrService
+        private async Task<string?> GetLargestPhotoUrlAsync(string photoId)
+        {
+            var url = $"https://api.flickr.com/services/rest/?" +
+                      $"method=flickr.photos.getSizes" +
+                      $"&api_key={_apiKey}" +
+                      $"&photo_id={Uri.EscapeDataString(photoId)}" +
+                      "&format=json&nojsoncallback=1";
+
+            var json = await _http.GetStringAsync(url);
+            using var doc = JsonDocument.Parse(json);
+
+            if (doc.RootElement.GetProperty("stat").GetString() != "ok")
+                return null;
+
+            var sizesNode = doc.RootElement.GetProperty("sizes").GetProperty("size");
+            string? best = null;
+            int maxWidth = 0;
+
+            foreach (var s in sizesNode.EnumerateArray())
+            {
+                if (s.TryGetProperty("width", out var wEl) && int.TryParse(wEl.GetRawText(), out var w))
+                {
+                    if (w > maxWidth)
+                    {
+                        maxWidth = w;
+                        best = s.GetProperty("source").GetString();
+                    }
+                }
+                else if (s.TryGetProperty("label", out var label) && best == null)
+                {
+                    // fallback if width not present
+                    best = s.GetProperty("source").GetString();
+                }
+            }
+
+            return best;
+        }
 
 
         #endregion
