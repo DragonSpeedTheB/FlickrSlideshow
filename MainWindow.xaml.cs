@@ -339,7 +339,7 @@ namespace FlickrSlideshow
             EnsurePrefetch(_index);
 
             while (!token.IsCancellationRequested)
-            {
+            {   
                 while (_paused)
                     await Task.Delay(200, token);
 
@@ -494,7 +494,8 @@ namespace FlickrSlideshow
                     // Download stream
                     using var stream = await _httpClient.GetStreamAsync(url).ConfigureAwait(false);
 
-                    // Create bitmap on background thread
+                    // Create bitmap on background thread and DO NOT set DecodePixelWidth
+                    // so we load the original pixel dimensions and let the layout cell handle scaling.
 #pragma warning disable CS8603 // Possible null reference return.
                     return await Task.Run(() =>
                     {
@@ -504,59 +505,23 @@ namespace FlickrSlideshow
                             bitmap.BeginInit();
                             bitmap.CacheOption = BitmapCacheOption.OnLoad;
 
-                            // Measure target width on UI thread
-                            double targetWidth = 0;
-                            Dispatcher.Invoke(() =>
-                            {
-                                targetWidth = SlideImage.ActualWidth;
-                            });
-
-                            int desiredDecodeWidth = 0;
-                            if (targetWidth > 0)
-                            {
-                                // Treat ActualWidth as pixels (ignore DPI)
-                                desiredDecodeWidth = Math.Max(1, (int)Math.Round(targetWidth));
-                            }
-
                             // Copy stream because original stream will be disposed
                             using var ms = new System.IO.MemoryStream();
                             stream.CopyTo(ms);
                             ms.Position = 0;
 
-                            // Determine original size before choosing decode width
-                            int originalWidth = 0;
-                            int originalHeight = 0;
-                            try
-                            {
-                                using var msForDecoder = new System.IO.MemoryStream(ms.ToArray());
-                                var decoder = BitmapDecoder.Create(msForDecoder, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.None);
-                                originalWidth = decoder.Frames[0].PixelWidth;
-                                originalHeight = decoder.Frames[0].PixelHeight;
-                            }
-                            catch
-                            {
-                                // ignore — we'll fall back to bitmap.PixelWidth after decode
-                            }
+                            bitmap.StreamSource = ms;
+                            bitmap.EndInit();
 
-                            // Cache original size if known
+                            // capture original pixel dimensions (full image)
+                            int originalWidth = bitmap.PixelWidth;
+                            int originalHeight = bitmap.PixelHeight;
                             lock (_imageCache)
                             {
                                 if (originalWidth > 0 && originalHeight > 0)
                                     _originalImageSizes[url] = (originalWidth, originalHeight);
                             }
 
-                            // Clamp decode width to the original image width to avoid upscaling
-                            int finalDecodeWidth = desiredDecodeWidth;
-                            if (desiredDecodeWidth > 0 && originalWidth > 0)
-                            {
-                                finalDecodeWidth = Math.Min(originalWidth, desiredDecodeWidth);
-                            }
-
-                            if (finalDecodeWidth > 0)
-                                bitmap.DecodePixelWidth = finalDecodeWidth;
-
-                            bitmap.StreamSource = ms;
-                            bitmap.EndInit();
                             bitmap.Freeze();
                             return bitmap;
                         }
@@ -673,27 +638,9 @@ namespace FlickrSlideshow
             }
             catch { origW = origW == 0 ? 0 : origW; origH = origH == 0 ? 0 : origH; }
 
-            // compute available "pixels" in the SlideImage area — treat DIPs as pixels (ignore DPI)
-            double availWidthDip = 0, availHeightDip = 0;
-            Dispatcher.Invoke(() =>
-            {
-                availWidthDip = SlideImage.ActualWidth;
-                availHeightDip = SlideImage.ActualHeight;
-            });
-
-            int availWpx = Math.Max(1, (int)Math.Round(availWidthDip)); // no DPI conversion
-            int availHpx = Math.Max(1, (int)Math.Round(availHeightDip)); // no DPI conversion   
-
-            int displayW = origW, displayH = origH;
-            if (origW > 0 && origH > 0)
-            {
-                double scale = Math.Min(1.0, Math.Min((double)availWpx / origW, (double)availHpx / origH));
-                displayW = Math.Max(1, (int)Math.Round(origW * scale));
-                displayH = Math.Max(1, (int)Math.Round(origH * scale));
-            }
-
+            // Since we no longer do manual resizing, display reported sizes are the same as original
             string origText = (origW > 0 && origH > 0) ? $"{origW}×{origH}" : "unknown";
-            string displayText = (displayW > 0 && displayH > 0) ? $"{displayW}×{displayH}" : "unknown";
+            string displayText = origText;
 
             string text = $"URL: {url}\nOriginal: {origText}\nDisplay: {displayText}";
             Dispatcher.Invoke(() =>
