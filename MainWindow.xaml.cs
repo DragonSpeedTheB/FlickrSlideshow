@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Net.Http;
 using System.Collections.Concurrent;
+using System.Windows.Threading;
 
 namespace FlickrSlideshow
 {
@@ -23,35 +24,44 @@ namespace FlickrSlideshow
         private List<FlickrPhoto> _photos = new();
         private int _index;
         private bool _paused = false;
-        private CancellationTokenSource _cts;
-        private bool _shuffle = true;
 
-        // Shared HttpClient to reuse connections
-        private static readonly HttpClient _httpClient = new HttpClient();
-
-        // Simple in-memory cache for decoded images
-        private readonly Dictionary<string, BitmapImage> _imageCache = new Dictionary<string, BitmapImage>();
-
-        // Track in-flight loads to avoid duplicate downloads
-        private readonly Dictionary<string, Task<BitmapImage>> _inflightLoads = new Dictionary<string, Task<BitmapImage>>();
-
-        // Limit concurrent prefetches
-        private readonly SemaphoreSlim _prefetchSemaphore = new SemaphoreSlim(3);
-
-
+        // restore recent users list (was removed during refactor)
         private List<FlickrUser> _recentUsers = new();
 
-        // add inside the class, with other fields
-        private readonly Dictionary<string, (int Width, int Height)> _originalImageSizes = new Dictionary<string, (int Width, int Height)>();
+        // slideshow helper
+        private Slideshow _slideshow;
+
+        private CancellationTokenSource _cts;
+        private bool _shuffle = true;
 
         public MainWindow()
         {
             InitializeComponent();
 
 #if DEBUG
-            // Show debug info textblock in debug builds
             DebugInfoText.Visibility = Visibility.Visible;
 #endif
+
+            // create slideshow with UI callback
+            _slideshow = new Slideshow(Dispatcher,
+                onShow: async (bitmap, url) =>
+                {
+                    // update image source and start fade animation here
+                    SlideImage.Source = bitmap;
+
+                    var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(2));
+                    SlideImage.BeginAnimation(OpacityProperty, fadeIn);
+
+                    await Task.CompletedTask;
+                },
+                onDebug: (url, bitmap) =>
+                {
+#if DEBUG
+                    UpdateDebugInfo(url, bitmap);
+#endif
+                },
+                httpClient: null // use default
+            );
 
             // Hook up editable ComboBox text changed
             UserComboBox.Loaded += (_, __) =>
@@ -60,34 +70,75 @@ namespace FlickrSlideshow
                     tb.TextChanged += UserComboBox_TextChanged;
             };
 
-            // Load recent users from settings
             LoadUserSettings();
 
-            // Focus keyboard for keybindings
             Loaded += (_, __) => Keyboard.Focus(this);
         }
 
-        // centralized pause/resume handling so behavior is consistent (Escape, Space, Resume button)
         private void SetPaused(bool paused)
         {
             _paused = paused;
-
             if (paused)
             {
-                // show overlay but keep the image visible so the photo + debug info remain visible
                 ResumeOverlay.Visibility = Visibility.Visible;
-
-                // restore to windowed so the user can interact with resized window
                 ExitFullScreen();
+                _slideshow.Pause();
             }
             else
             {
                 ResumeOverlay.Visibility = Visibility.Collapsed;
-
-                // return to full screen when resuming
                 EnterFullScreen();
+                _slideshow.Resume();
             }
         }
+
+        private void StartShow()
+        {
+            if (_photos.Count == 0) return;
+
+            _slideshow.Start(_photos, _shuffle);
+        }
+
+        private void ShowNextImage()
+        {
+            _slideshow.Next();
+        }
+
+        private void ShowPreviousImage()
+        {
+            _slideshow.Previous();
+        }
+
+#if DEBUG
+        private void UpdateDebugInfo(string url, BitmapImage? bitmap)
+        {
+            int origW = 0, origH = 0;
+
+            // try to read sizes from slideshow internal cache via _slideshow (not exposed),
+            // fallback to the bitmap that was just displayed
+            try
+            {
+                if (bitmap != null)
+                {
+                    origW = bitmap.PixelWidth;
+                    origH = bitmap.PixelHeight;
+                }
+            }
+            catch { origW = origH = 0; }
+
+            string origText = (origW > 0 && origH > 0) ? $"{origW}×{origH}" : "unknown";
+            string displayText = origText;
+
+            string text = $"URL: {url}\nOriginal: {origText}\nDisplay: {displayText}";
+            Dispatcher.Invoke(() =>
+            {
+                DebugInfoText.Text = text;
+                DebugInfoText.Visibility = Visibility.Visible;
+            });
+        }
+#else
+        private void UpdateDebugInfo(string url, BitmapImage? bitmap) { }
+#endif
 
         #region User management
 
@@ -314,257 +365,6 @@ namespace FlickrSlideshow
             this.Topmost = false;
         }
 
-        private void StartShow()
-        {
-            if (_photos.Count == 0) return;
-
-            if (_shuffle)
-                Shuffle(_photos);
-            _index = 0;
-
-            _cts?.Cancel();
-            _cts = new CancellationTokenSource();
-
-            // Kick off initial prefetch of current + 2 ahead
-            EnsurePrefetch(_index);
-
-            _ = RunSlideshow(_cts.Token);
-        }
-
-        private async Task RunSlideshow(CancellationToken token)
-        {
-            BitmapImage nextImage = await LoadBitmapAsync(_photos[_index].Url);
-
-            // Ensure we keep two images prefetched ahead
-            EnsurePrefetch(_index);
-
-            while (!token.IsCancellationRequested)
-            {   
-                while (_paused)
-                    await Task.Delay(200, token);
-
-                var currentImage = nextImage;
-                _index = (_index + 1) % _photos.Count;
-
-                // Get next image (should be cached/prefetched usually)
-                nextImage = await LoadBitmapAsync(_photos[_index].Url);
-
-                // Maintain two-image prefetch window
-                EnsurePrefetch(_index);
-
-                // previous index corresponds to the image we are about to show
-                int prevIndex = (_index - 1 + _photos.Count) % _photos.Count;
-                string prevUrl = _photos[prevIndex].Url;
-
-                await ShowImage(currentImage, token, prevUrl);
-            }
-        }
-
-        private async Task ShowImage(BitmapImage bitmap, CancellationToken token, string url)
-        {
-            SlideImage.Source = bitmap;
-
-#if DEBUG
-            UpdateDebugInfo(url, bitmap);
-#endif
-
-            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(2));
-            SlideImage.BeginAnimation(OpacityProperty, fadeIn);
-
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(8), token);
-            }
-            catch (TaskCanceledException) { }
-
-            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(2));
-            SlideImage.BeginAnimation(OpacityProperty, fadeOut);
-        }
-
-        private void ShowNextImage()
-        {
-            if (_photos.Count == 0) return;
-
-            _index = (_index + 1) % _photos.Count;
-            string url = _photos[_index].Url;
-            _ = LoadBitmapAsync(_photos[_index].Url).ContinueWith(t =>
-            {
-                Dispatcher.Invoke(() =>
-                {
-                    SlideImage.Source = t.Result;
-#if DEBUG
-                    UpdateDebugInfo(url, t.Result);
-#endif
-                });
-            });
-        }
-
-        private void ShowPreviousImage()
-        {
-            if (_photos.Count == 0) return;
-
-            _index = (_index - 1 + _photos.Count) % _photos.Count;
-            string url = _photos[_index].Url;
-            _ = LoadBitmapAsync(_photos[_index].Url).ContinueWith(t =>
-            {
-                Dispatcher.Invoke(() =>
-                {
-                    SlideImage.Source = t.Result;
-#if DEBUG
-                    UpdateDebugInfo(url, t.Result);
-#endif
-                });
-            });
-        }
-
-        private void EnsurePrefetch(int currentIndex)
-        {
-            if (_photos.Count == 0) return;
-
-            // Prefetch current, +1 and +2
-            for (int i = 0; i <= 2; i++)
-            {
-                int idx = (currentIndex + i) % _photos.Count;
-                string url = _photos[idx].Url;
-
-                // Start load if not cached or inflight
-                lock (_imageCache)
-                {
-                    if (_imageCache.ContainsKey(url) || _inflightLoads.ContainsKey(url))
-                        continue;
-
-                    // Start the async load (no extra Task.Run needed)
-                    var task = LoadBitmapAsync(url);
-                    _inflightLoads[url] = task;
-
-                    // When complete, move to cache and remove inflight
-                    _ = task.ContinueWith(t =>
-                    {
-                        lock (_imageCache)
-                        {
-                            if (t.Status == TaskStatus.RanToCompletion && t.Result != null)
-                            {
-                                _imageCache[url] = t.Result;
-                            }
-                            _inflightLoads.Remove(url);
-                        }
-                    }, TaskScheduler.Default);
-                }
-            }
-        }
-
-        private static void Shuffle<T>(IList<T> list)
-        {
-            var rng = new Random();
-            for (int i = list.Count - 1; i > 0; i--)
-            {
-                int j = rng.Next(i + 1);
-                (list[i], list[j]) = (list[j], list[i]);
-            }
-        }
-
-        #endregion
-
-        #region Image loading
-
-        private async Task<BitmapImage> LoadBitmapAsync(string url)
-        {
-            // Return from cache if present
-            Task<BitmapImage> inflight = null;
-            lock (_imageCache)
-            {
-                if (_imageCache.TryGetValue(url, out var cached))
-                    return cached;
-
-                if (_inflightLoads.TryGetValue(url, out inflight))
-                {
-                    // we capture the inflight task and await it outside the lock
-                }
-            }
-
-            if (inflight != null)
-                return await inflight.ConfigureAwait(false);
-
-            // Load and decode off-UI thread
-            async Task<BitmapImage> LoadInternal()
-            {
-                await _prefetchSemaphore.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    // Download stream
-                    using var stream = await _httpClient.GetStreamAsync(url).ConfigureAwait(false);
-
-                    // Create bitmap on background thread and DO NOT set DecodePixelWidth
-                    // so we load the original pixel dimensions and let the layout cell handle scaling.
-#pragma warning disable CS8603 // Possible null reference return.
-                    return await Task.Run(() =>
-                    {
-                        try
-                        {
-                            var bitmap = new BitmapImage();
-                            bitmap.BeginInit();
-                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-
-                            // Copy stream because original stream will be disposed
-                            using var ms = new System.IO.MemoryStream();
-                            stream.CopyTo(ms);
-                            ms.Position = 0;
-
-                            bitmap.StreamSource = ms;
-                            bitmap.EndInit();
-
-                            // capture original pixel dimensions (full image)
-                            int originalWidth = bitmap.PixelWidth;
-                            int originalHeight = bitmap.PixelHeight;
-                            lock (_imageCache)
-                            {
-                                if (originalWidth > 0 && originalHeight > 0)
-                                    _originalImageSizes[url] = (originalWidth, originalHeight);
-                            }
-
-                            bitmap.Freeze();
-                            return bitmap;
-                        }
-                        catch
-                        {
-                            return null;
-                        }
-                    }).ConfigureAwait(false);
-#pragma warning restore CS8603 // Possible null reference return.
-                }
-                finally
-                {
-                    _prefetchSemaphore.Release();
-                }
-            }
-
-            Task<BitmapImage> loadTask;
-            lock (_imageCache)
-            {
-                // Check again in case another thread raced in
-                if (_inflightLoads.TryGetValue(url, out var existing))
-                {
-                    loadTask = existing;
-                }
-                else
-                {
-                    loadTask = LoadInternal();
-                    _inflightLoads[url] = loadTask;
-                }
-            }
-
-            var result = await loadTask.ConfigureAwait(false);
-
-            lock (_imageCache)
-            {
-                if (result != null)
-                    _imageCache[url] = result;
-                _inflightLoads.Remove(url);
-            }
-
-            return result;
-        }
-
         #endregion
 
         #region Keyboard
@@ -613,44 +413,5 @@ namespace FlickrSlideshow
 
 
         #endregion
-
-#if DEBUG
-        private void UpdateDebugInfo(string url, BitmapImage? bitmap)
-        {
-            int origW = 0, origH = 0;
-            lock (_imageCache)
-            {
-                if (_originalImageSizes.TryGetValue(url, out var dims))
-                {
-                    origW = dims.Width;
-                    origH = dims.Height;
-                }
-            }
-
-            // fallback to bitmap pixel dims if original not recorded
-            try
-            {
-                if ((origW == 0 || origH == 0) && bitmap != null)
-                {
-                    origW = bitmap.PixelWidth;
-                    origH = bitmap.PixelHeight;
-                }
-            }
-            catch { origW = origW == 0 ? 0 : origW; origH = origH == 0 ? 0 : origH; }
-
-            // Since we no longer do manual resizing, display reported sizes are the same as original
-            string origText = (origW > 0 && origH > 0) ? $"{origW}×{origH}" : "unknown";
-            string displayText = origText;
-
-            string text = $"URL: {url}\nOriginal: {origText}\nDisplay: {displayText}";
-            Dispatcher.Invoke(() =>
-            {
-                DebugInfoText.Text = text;
-                DebugInfoText.Visibility = Visibility.Visible;
-            });
-        }
-#else
-        private void UpdateDebugInfo(string url, BitmapImage? bitmap) { }
-#endif
     }
 }
