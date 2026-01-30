@@ -13,7 +13,8 @@ namespace FlickrSlideshow
     public class Slideshow
     {
         private readonly Dispatcher _dispatcher;
-        private readonly Func<BitmapImage, string, Task> _onShow;
+        // now pass title along with url
+        private readonly Func<BitmapImage, string, string?, Task> _onShow;
         private readonly Action<string, BitmapImage?>? _onDebug;
         private readonly HttpClient _httpClient;
 
@@ -28,7 +29,7 @@ namespace FlickrSlideshow
         private bool _paused;
         private bool _shuffle;
 
-        public Slideshow(Dispatcher dispatcher, Func<BitmapImage, string, Task> onShow, Action<string, BitmapImage?>? onDebug = null, HttpClient? httpClient = null)
+        public Slideshow(Dispatcher dispatcher, Func<BitmapImage, string, string?, Task> onShow, Action<string, BitmapImage?>? onDebug = null, HttpClient? httpClient = null)
         {
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _onShow = onShow ?? throw new ArgumentNullException(nameof(onShow));
@@ -67,7 +68,7 @@ namespace FlickrSlideshow
         {
             // initial image
             BitmapImage nextImage = await LoadBitmapAsync(_photos[_index].Url).ConfigureAwait(false);
-            await InvokeShowAsync(nextImage, _photos[_index].Url).ConfigureAwait(false);
+            await InvokeShowAsync(nextImage, _photos[_index].Url, _photos[_index].Title).ConfigureAwait(false);
 
             // keep two images prefetched ahead
             EnsurePrefetch(_index);
@@ -81,13 +82,14 @@ namespace FlickrSlideshow
 
                 var currentIndex = (_index - 1 + _photos.Count) % _photos.Count;
                 var url = _photos[_index].Url;
+                var title = _photos[_index].Title;
 
                 var image = await LoadBitmapAsync(url).ConfigureAwait(false);
 
                 EnsurePrefetch(_index);
 
                 // show (UI callback)
-                await InvokeShowAsync(image, url).ConfigureAwait(false);
+                await InvokeShowAsync(image, url, title).ConfigureAwait(false);
 
                 // wait between images (timing handled here; UI animations are still in MainWindow)
                 try
@@ -103,8 +105,9 @@ namespace FlickrSlideshow
             if (_photos.Count == 0) return;
             _index = (_index + 1) % _photos.Count;
             var url = _photos[_index].Url;
+            var title = _photos[_index].Title;
             var image = await LoadBitmapAsync(url).ConfigureAwait(false);
-            await InvokeShowAsync(image, url).ConfigureAwait(false);
+            await InvokeShowAsync(image, url, title).ConfigureAwait(false);
             EnsurePrefetch(_index);
         }
 
@@ -113,19 +116,20 @@ namespace FlickrSlideshow
             if (_photos.Count == 0) return;
             _index = (_index - 1 + _photos.Count) % _photos.Count;
             var url = _photos[_index].Url;
+            var title = _photos[_index].Title;
             var image = await LoadBitmapAsync(url).ConfigureAwait(false);
-            await InvokeShowAsync(image, url).ConfigureAwait(false);
+            await InvokeShowAsync(image, url, title).ConfigureAwait(false);
             EnsurePrefetch(_index);
         }
 
-        private async Task InvokeShowAsync(BitmapImage? bitmap, string url)
+        private async Task InvokeShowAsync(BitmapImage? bitmap, string url, string? title)
         {
             if (bitmap == null) return;
             // ensure callback runs on UI thread (caller expects to update UI)
             await _dispatcher.InvokeAsync(async () =>
             {
                 _onDebug?.Invoke(url, bitmap);
-                await _onShow(bitmap, url).ConfigureAwait(false);
+                await _onShow(bitmap, url, title).ConfigureAwait(false);
             });
         }
 

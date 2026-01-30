@@ -5,13 +5,14 @@ using System.Text;
 
 namespace FlickrSlideshow
 {
-    public record FlickrPhoto(string Url);
+    // include Title so callers may display it
+    public record FlickrPhoto(string Url, string? Title);
     public record FlickrAlbum(string Id, string Title);
 
     class FlickrModels
     {
     }
-    public class FlickrUser
+    public class FlickrUser 
     {
         public string Name { get; set; }  // e.g., "BrianHampson"
         public string Id { get; set; }    // Flickr user ID

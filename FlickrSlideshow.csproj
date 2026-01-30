@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>flickr.ico</ApplicationIcon>
     <PlatformTarget>x64</PlatformTarget>
-    <Version>1.5.0.0</Version>
+    <Version>2.0.0.0</Version>
     <Platforms>AnyCPU;x64</Platforms>
     <IncludeSymbols>True</IncludeSymbols>
   </PropertyGroup>

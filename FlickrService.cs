@@ -123,8 +123,10 @@ namespace FlickrSlideshow
                     if (string.IsNullOrEmpty(imageUrl) && !string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(secret))
                         imageUrl = $"https://live.staticflickr.com/{server}/{id}_{secret}_b.jpg";
 
+                    var title = TryGet(p, "title") ?? "";
+
                     if (!string.IsNullOrEmpty(imageUrl))
-                        photos.Add(new FlickrPhoto(imageUrl));
+                        photos.Add(new FlickrPhoto(imageUrl, title));
 
                     progress?.Report(photos.Count);
                 }
@@ -181,8 +183,10 @@ namespace FlickrSlideshow
                         TryGet(p, "url_h") ??
                         TryGet(p, "url_l");
 
+                    var title = TryGet(p, "title") ?? "";
+
                     if (!string.IsNullOrEmpty(imageUrl))
-                        photos.Add(new FlickrPhoto(imageUrl));
+                        photos.Add(new FlickrPhoto(imageUrl, title));
                 }
 
                 page++;
@@ -240,6 +244,8 @@ namespace FlickrSlideshow
                         var server = p.TryGetProperty("server", out var serverEl) ? serverEl.GetString() : null;
                         var secret = p.TryGetProperty("secret", out var secretEl) ? secretEl.GetString() : null;
 
+                        var title = TryGet(p, "title") ?? "";
+
                         if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(secret))
                         {
                             string? imageUrl =
@@ -250,7 +256,7 @@ namespace FlickrSlideshow
                                 TryGet(p, "url_l") ??
                                 $"https://live.staticflickr.com/{server}/{id}_{secret}_b.jpg";
 
-                            photos.Add(new FlickrPhoto(imageUrl));
+                            photos.Add(new FlickrPhoto(imageUrl, title));
                         }
                     }
                 }

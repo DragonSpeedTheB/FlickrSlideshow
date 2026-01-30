@@ -13,6 +13,7 @@ using System.Windows.Media.Imaging;
 using System.Net.Http;
 using System.Collections.Concurrent;
 using System.Windows.Threading;
+using System.Reflection;
 
 namespace FlickrSlideshow
 {
@@ -38,19 +39,27 @@ namespace FlickrSlideshow
         {
             InitializeComponent();
 
+            // show assembly version in initial window
+            var asm = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+            var version = asm?.GetName().Version;
+            VersionText.Text = $"Version: {version?.ToString(3) ?? "unknown"}";
+
 #if DEBUG
             DebugInfoText.Visibility = Visibility.Visible;
 #endif
 
             // create slideshow with UI callback
             _slideshow = new Slideshow(Dispatcher,
-                onShow: async (bitmap, url) =>
+                onShow: async (bitmap, url, title) =>
                 {
                     // update image source and start fade animation here
                     SlideImage.Source = bitmap;
 
                     var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(2));
                     SlideImage.BeginAnimation(OpacityProperty, fadeIn);
+
+                    // show title in bottom-left caption area
+                    CaptionText.Text = title ?? "No Title";
 
                     await Task.CompletedTask;
                 },
@@ -70,9 +79,81 @@ namespace FlickrSlideshow
                     tb.TextChanged += UserComboBox_TextChanged;
             };
 
-            LoadUserSettings();
+            // use async initialization so we can lookup a default user if none saved
+            _ = LoadUserSettingsAsync();
 
             Loaded += (_, __) => Keyboard.Focus(this);
+        }
+
+        private async Task LoadUserSettingsAsync()
+        {
+            // Deserialize recent users
+            if (!string.IsNullOrEmpty(Properties.Settings.Default.RecentUsers))
+            {
+                try
+                {
+                    _recentUsers = JsonSerializer.Deserialize<List<FlickrUser>>(Properties.Settings.Default.RecentUsers)
+                                   ?? new List<FlickrUser>();
+                }
+                catch { _recentUsers = new List<FlickrUser>(); }
+            }
+
+            // populate combo box immediately with whatever we have
+            UserComboBox.ItemsSource = _recentUsers;
+
+            // Select last used user if available
+            if (!string.IsNullOrEmpty(Properties.Settings.Default.LastUserId))
+            {
+                var lastUser = _recentUsers.FirstOrDefault(u => u.Id == Properties.Settings.Default.LastUserId);
+                if (lastUser != null)
+                {
+                    UserComboBox.SelectedItem = lastUser;
+                    _flickr = new FlickrService(ApiKey, lastUser.Id);
+                    Dispatcher.Invoke(() => StatusText.Text = $"Last user: {lastUser.Name}");
+                    Dispatcher.Invoke(() => { AllPhotosButton.IsEnabled = true; PickAlbumsButton.IsEnabled = true; });
+                    return;
+                }
+            }
+
+            // If no recent users, try to prepopulate with "dragonspeed"
+            if (_recentUsers.Count == 0)
+            {
+                try
+                {
+                    var tempService = new FlickrService(ApiKey, "");
+                    string id = await tempService.GetUserIdFromName("dragonspeed");
+
+                    var defaultUser = new FlickrUser { Name = "dragonspeed", Id = id };
+
+                    _recentUsers.RemoveAll(u => u.Id == id);
+                    _recentUsers.Insert(0, defaultUser);
+
+                    // persist and update UI on UI thread
+                    Properties.Settings.Default.RecentUsers = JsonSerializer.Serialize(_recentUsers);
+                    Properties.Settings.Default.LastUserId = defaultUser.Id;
+                    Properties.Settings.Default.Save();
+
+                    Dispatcher.Invoke(() =>
+                    {
+                        UserComboBox.ItemsSource = null;
+                        UserComboBox.ItemsSource = _recentUsers;
+                        UserComboBox.SelectedItem = defaultUser;
+                        StatusText.Text = $"Selected user: {defaultUser.Name}";
+                        AllPhotosButton.IsEnabled = true;
+                        PickAlbumsButton.IsEnabled = true;
+                    });
+
+                    _flickr = new FlickrService(ApiKey, defaultUser.Id);
+                }
+                catch (Exception ex)
+                {
+                    // non-fatal: show message and keep UI usable
+                    Dispatcher.Invoke(() =>
+                    {
+                        StatusText.Text = $"Default user lookup failed: {ex.Message}";
+                    });
+                }
+            }
         }
 
         private void SetPaused(bool paused)
@@ -172,9 +253,30 @@ namespace FlickrSlideshow
             }
         }
 
+        private void UpdateAddUserButtonState(string? text)
+        {
+            var trimmed = text?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                AddUserButton.IsEnabled = false;
+                return;
+            }
+
+            bool exists = _recentUsers.Any(u =>
+                string.Equals(u.Name?.Trim(), trimmed, StringComparison.CurrentCultureIgnoreCase));
+
+            AddUserButton.IsEnabled = !exists;
+        }
+
         private void UserComboBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            AddUserButton.IsEnabled = !string.IsNullOrWhiteSpace(((TextBox)sender).Text);
+            if (sender is not TextBox tb)
+            {
+                AddUserButton.IsEnabled = false;
+                return;
+            }
+
+            UpdateAddUserButtonState(tb.Text);
         }
 
         private async void AddUser_Click(object sender, RoutedEventArgs e)
@@ -211,6 +313,9 @@ namespace FlickrSlideshow
                 StatusText.Text = $"User '{name}' added and selected!";
                 AllPhotosButton.IsEnabled = true;
                 PickAlbumsButton.IsEnabled = true;
+
+                // newly-selected existing user -> disable Add button
+                AddUserButton.IsEnabled = false;
             }
             catch (Exception ex)
             {
@@ -218,7 +323,11 @@ namespace FlickrSlideshow
             }
             finally
             {
-                AddUserButton.IsEnabled = true;
+                // evaluate textbox to set correct enabled state (re-enable only if non-empty & not matching)
+                if (UserComboBox.Template.FindName("PART_EditableTextBox", UserComboBox) is TextBox finalTb)
+                    UpdateAddUserButtonState(finalTb.Text);
+                else
+                    AddUserButton.IsEnabled = false;
             }
         }
 
@@ -235,6 +344,9 @@ namespace FlickrSlideshow
                 StatusText.Text = $"Selected user: {user.Name}";
                 AllPhotosButton.IsEnabled = true;
                 PickAlbumsButton.IsEnabled = true;
+
+                // selection matches an existing recent user -> disable Add button
+                AddUserButton.IsEnabled = false;
             }
         }
 
