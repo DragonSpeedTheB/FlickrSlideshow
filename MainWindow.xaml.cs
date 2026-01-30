@@ -32,7 +32,6 @@ namespace FlickrSlideshow
         // slideshow helper
         private Slideshow _slideshow;
 
-        private CancellationTokenSource _cts;
         private bool _shuffle = true;
 
         public MainWindow()
@@ -436,7 +435,10 @@ namespace FlickrSlideshow
             var albums = await _flickr.GetAlbums();
             albums.Sort((a, b) => string.Compare(a.Title, b.Title, StringComparison.CurrentCultureIgnoreCase));
 
-            var picker = new AlbumPicker(albums);
+            // fetch collections so user can pick them as well
+            var collections = await _flickr.GetCollections();
+
+            var picker = new AlbumPicker(albums, collections);
             if (picker.ShowDialog() == true)
             {
                 EnterFullScreen();
@@ -488,7 +490,7 @@ namespace FlickrSlideshow
             switch (e.Key)
             {
                 case Key.Escape:
-                    if (_photos.Count > 0 && _cts != null && !_cts.IsCancellationRequested)
+                    if (_photos.Count > 0 && _slideshow != null && _slideshow.IsRunning)
                     {
                         // Pause slideshow (keep image visible)
                         SetPaused(true);

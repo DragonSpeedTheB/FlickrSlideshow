@@ -37,6 +37,9 @@ namespace FlickrSlideshow
             _httpClient = httpClient ?? new HttpClient();
         }
 
+        // Expose running state so callers (MainWindow) can decide when to pause vs close.
+        public bool IsRunning => _cts != null && !_cts.IsCancellationRequested;
+
         public void Start(List<FlickrPhoto> photos, bool shuffle)
         {
             if (photos == null || photos.Count == 0) return;

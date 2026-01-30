@@ -28,7 +28,7 @@ namespace FlickrSlideshow
                 $"https://api.flickr.com/services/rest/?" +
                 $"method=flickr.photosets.getList" +
                 $"&api_key={_apiKey}" +
-                $"&user_id={_userId}" +
+                $"&user_id={_userId}" + 
                 $"&format=json&nojsoncallback=1";
 
             var json = await _http.GetStringAsync(url);
@@ -44,8 +44,54 @@ namespace FlickrSlideshow
             {
                 result.Add(new FlickrAlbum(
                     s.GetProperty("id").GetString()!,
-                    s.GetProperty("title").GetProperty("_content").GetString()!
+                    GetFlexibleTitle(s, "title")
                 ));
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Get top-level collections (and the albums contained in them).
+        /// </summary>
+        public async Task<List<FlickrCollection>> GetCollections()
+        {
+            var url =
+                $"https://api.flickr.com/services/rest/?" +
+                $"method=flickr.collections.getTree" +
+                $"&api_key={_apiKey}" +
+                $"&user_id={_userId}" +
+                $"&format=json&nojsoncallback=1";
+
+            var json = await _http.GetStringAsync(url);
+            using var doc = JsonDocument.Parse(json);
+
+            if (!doc.RootElement.TryGetProperty("collections", out var root))
+                return new List<FlickrCollection>();
+
+            var result = new List<FlickrCollection>();
+
+            if (root.TryGetProperty("collection", out var collArray))
+            {
+                foreach (var c in collArray.EnumerateArray())
+                {
+                    var colId = c.GetProperty("id").GetString() ?? "";
+                    var colTitle = GetStringPropertyFlexible(c, "title");
+
+                    var albums = new List<FlickrAlbum>();
+
+                    if (c.TryGetProperty("set", out var setsNode))
+                    {
+                        foreach (var s in setsNode.EnumerateArray())
+                        {
+                            var setId = s.GetProperty("id").GetString() ?? "";
+                            var setTitle = GetStringPropertyFlexible(s, "title");
+                            albums.Add(new FlickrAlbum(setId, setTitle));
+                        }
+                    }
+
+                    result.Add(new FlickrCollection(colId, colTitle, albums));
+                }
             }
 
             return result;
@@ -202,6 +248,33 @@ namespace FlickrSlideshow
             return element.TryGetProperty(name, out var prop)
                 ? prop.GetString()
                 : null;
+        }
+
+        private static string GetStringPropertyFlexible(JsonElement parent, string name)
+        {
+            if (!parent.TryGetProperty(name, out var prop))
+                return "";
+
+            return prop.ValueKind switch
+            {
+                JsonValueKind.Object when prop.TryGetProperty("_content", out var c) => c.GetString() ?? "",
+                JsonValueKind.String => prop.GetString() ?? "",
+                _ => ""
+            };
+        }
+
+        // Handle Flickr returning title as either a string or an object with "_content".
+        private static string GetFlexibleTitle(JsonElement parent, string name)
+        {
+            if (!parent.TryGetProperty(name, out var prop))
+                return "";
+
+            return prop.ValueKind switch
+            {
+                JsonValueKind.Object when prop.TryGetProperty("_content", out var c) => c.GetString() ?? "",
+                JsonValueKind.String => prop.GetString() ?? "",
+                _ => ""
+            };
         }
 
 
