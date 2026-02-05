@@ -14,12 +14,14 @@ using System.Net.Http;
 using System.Collections.Concurrent;
 using System.Windows.Threading;
 using System.Reflection;
+using Microsoft.Extensions.Configuration;
 
 namespace FlickrSlideshow
 {
     public partial class MainWindow : Window
     {
-        private const string ApiKey = "5ba7109e23efeb1b9ce201c03ef489c5";
+        private string ApiKey;
+
 
         private FlickrService _flickr;
         private List<FlickrPhoto> _photos = new();
@@ -42,6 +44,15 @@ namespace FlickrSlideshow
             var asm = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
             var version = asm?.GetName().Version;
             VersionText.Text = $"Version: {version?.ToString(3) ?? "unknown"}";
+
+            // load API key from settings
+            var config = new ConfigurationBuilder()
+                .SetBasePath(AppContext.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: false)
+                .Build();
+
+            string flickrApiKey = config["Flickr:ApiKey"];
+
 
 #if DEBUG
             DebugInfoText.Visibility = Visibility.Visible;
