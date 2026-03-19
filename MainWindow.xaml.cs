@@ -51,7 +51,7 @@ namespace FlickrSlideshow
                 .AddJsonFile("appsettings.json", optional: false)
                 .Build();
 
-            string flickrApiKey = config["Flickr:ApiKey"];
+            ApiKey = config["Flickr:ApiKey"];
 
 
 #if DEBUG
@@ -203,24 +203,23 @@ namespace FlickrSlideshow
 #if DEBUG
         private void UpdateDebugInfo(string url, BitmapImage? bitmap)
         {
-            int origW = 0, origH = 0;
+            // Show both pixel dimensions and WPF device-independent sizes (Width/Height) plus DPI.
+            string pixelText = "unknown";
+            string dipText = "unknown";
+            string dpiText = "unknown";
 
-            // try to read sizes from slideshow internal cache via _slideshow (not exposed),
-            // fallback to the bitmap that was just displayed
             try
             {
                 if (bitmap != null)
                 {
-                    origW = bitmap.PixelWidth;
-                    origH = bitmap.PixelHeight;
+                    pixelText = $"{bitmap.PixelWidth}×{bitmap.PixelHeight}";
+                    dipText = $"{bitmap.Width}×{bitmap.Height}";
+                    dpiText = $"DPI: {bitmap.DpiX}×{bitmap.DpiY}";
                 }
             }
-            catch { origW = origH = 0; }
+            catch { }
 
-            string origText = (origW > 0 && origH > 0) ? $"{origW}×{origH}" : "unknown";
-            string displayText = origText;
-
-            string text = $"URL: {url}\nOriginal: {origText}\nDisplay: {displayText}";
+            string text = $"URL: {url}\nPixels: {pixelText}\nDIPs: {dipText}\n{dpiText}";
             Dispatcher.Invoke(() =>
             {
                 DebugInfoText.Text = text;
