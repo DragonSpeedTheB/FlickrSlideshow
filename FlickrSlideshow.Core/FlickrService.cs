@@ -1,8 +1,10 @@
-﻿// FlickrService is now defined in FlickrSlideshow.Core.
-// This file is kept as a placeholder; the implementation lives in the Core library.
+using System;
+using System.Collections.Generic;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading.Tasks;
 
-
-namespace FlickrSlideshow
+namespace FlickrSlideshow.Core
 {
     public class FlickrService
     {
@@ -399,3 +401,4 @@ namespace FlickrSlideshow
         #endregion
     }
 }
+

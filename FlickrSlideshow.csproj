@@ -30,8 +30,23 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="flickr.png" />
+    <!-- Exclude sub-projects' folders — compiled as separate projects -->
+    <Compile Remove="FlickrSlideshow.Core\**" />
+    <Compile Remove="FlickrSlideshow.Xbox\**" />
+    <Page Remove="FlickrSlideshow.Xbox\**" />
+    <EmbeddedResource Remove="FlickrSlideshow.Xbox\**" />
+    <None Remove="FlickrSlideshow.Xbox\**" />
+    <!-- These files' content now lives in Core; keep as None so VS shows them -->
+    <Compile Remove="FlickrService.cs" />
+    <Compile Remove="FlickrModels.cs" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="FlickrService.cs" />
+    <None Include="FlickrModels.cs" />
+  </ItemGroup>
+
+
 
   <ItemGroup>
     <Content Include="flickr.ico" />
@@ -39,10 +54,16 @@
 
   <ItemGroup>
     <None Include=".github\copilot-instructions.md" />
+    <None Include="FlickrSlideshow.Core\FlickrSlideshow.Core.csproj" />
+    <None Include="FlickrSlideshow.Xbox\FlickrSlideshow.Xbox.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="FlickrSlideshow.Core\FlickrSlideshow.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

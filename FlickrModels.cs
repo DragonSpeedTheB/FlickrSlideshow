@@ -1,23 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
+﻿// Types are now defined in FlickrSlideshow.Core and aliased here so existing
+// code in the FlickrSlideshow namespace continues to compile without changes.
+global using FlickrSlideshow.Core;
 
 namespace FlickrSlideshow
 {
-    public record FlickrPhoto(string Url, string? Title);
-    public record FlickrAlbum(string Id, string Title);
-    public record FlickrCollection(string Id, string Title, List<FlickrAlbum> Albums);
-
-    class FlickrModels
-    {
-    }
-    public class FlickrUser
-    {
-        public string Name { get; set; }  // e.g., "BrianHampson"
-        public string Id { get; set; }    // Flickr user ID
-
-        public override string ToString() => Name; // Shows Name in ComboBox
-    }
-
+    // Intentionally empty — types come from FlickrSlideshow.Core via global using above.
 }
