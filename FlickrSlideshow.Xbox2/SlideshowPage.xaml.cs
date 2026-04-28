@@ -19,7 +19,7 @@ public sealed partial class SlideshowPage : Page
     private readonly AppState _state = AppState.Instance;
     private CancellationTokenSource? _cts;
     private static readonly TimeSpan SlideDuration = TimeSpan.FromSeconds(8);
-    private readonly System.Net.Http.HttpClient _http = new();
+    private System.Net.Http.HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     public SlideshowPage()
     {
@@ -82,28 +82,51 @@ public sealed partial class SlideshowPage : Page
     {
         try
         {
-            var bytes = await _http.GetByteArrayAsync(photo.Url);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            cts.CancelAfter(TimeSpan.FromSeconds(30));
+
+            byte[] bytes;
+            try
+            {
+                bytes = await _http.GetByteArrayAsync(photo.Url, cts.Token);
+            }
+            catch (ObjectDisposedException)
+            {
+                // SSL connection was disposed — create a fresh HttpClient and retry once
+                _http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                bytes = await _http.GetByteArrayAsync(photo.Url, cts.Token);
+            }
             if (token.IsCancellationRequested) return;
 
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, async () =>
+            BitmapImage? bitmap = null;
+            try
+            {
+                bitmap = new BitmapImage();
+                using var ms = new InMemoryRandomAccessStream();
+                using (var w = new DataWriter(ms.GetOutputStreamAt(0)))
+                {
+                    w.WriteBytes(bytes);
+                    await w.StoreAsync();
+                }
+                ms.Seek(0);
+                await bitmap.SetSourceAsync(ms);
+            }
+            catch (Exception ex)
+            {
+                App.Log("Image decode error: " + ex.Message);
+                return;
+            }
+
+            if (token.IsCancellationRequested) return;
+
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
             {
                 try
                 {
-                    var bitmap = new BitmapImage();
-                    using var ms = new InMemoryRandomAccessStream();
-                    using (var w = new DataWriter(ms.GetOutputStreamAt(0)))
-                    {
-                        w.WriteBytes(bytes);
-                        await w.StoreAsync();
-                    }
-                    ms.Seek(0);
-                    await bitmap.SetSourceAsync(ms);
-
                     SlideImage.Source = bitmap;
                     CaptionText.Text = photo.Title ?? "";
                     LoadingText.Visibility = Visibility.Collapsed;
 
-                    // Fade in
                     var da = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromSeconds(1.5) };
                     Storyboard.SetTarget(da, SlideImage);
                     Storyboard.SetTargetProperty(da, "Opacity");
@@ -111,10 +134,11 @@ public sealed partial class SlideshowPage : Page
                     sb.Children.Add(da);
                     sb.Begin();
                 }
-                catch { }
+                catch (Exception ex) { App.Log("UI update error: " + ex.Message); }
             });
         }
-        catch { }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { App.Log("ShowPhotoAsync error: " + ex.Message); }
     }
 
     private void ResumeButton_Click(object sender, RoutedEventArgs e) { }
