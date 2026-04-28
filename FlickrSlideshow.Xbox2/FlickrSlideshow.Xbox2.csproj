@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>FlickrSlideshow.Xbox2</RootNamespace>
+    <AssemblyName>FlickrSlideshow.Xbox2</AssemblyName>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWinUI>false</UseWinUI>
+    <ApplicationManifest>Package.appxmanifest</ApplicationManifest>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseUwpTools>true</UseUwpTools>
+    <UseUwp>true</UseUwp>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FlickrSlideshow.Core\FlickrSlideshow.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Remove all stale XAML-generated files from obj to prevent ConnectionId/duplicate errors -->
+  <Target Name="CleanStaleXaml" BeforeTargets="Build">
+    <ItemGroup>
+      <StaleXamlFiles Include="$(MSBuildThisFileDirectory)obj\**\*.xaml" />
+      <StaleXamlFiles Include="$(MSBuildThisFileDirectory)obj\**\*.g.cs" />
+      <StaleXamlFiles Include="$(MSBuildThisFileDirectory)obj\**\*.g.i.cs" />
+    </ItemGroup>
+    <Delete Files="@(StaleXamlFiles)" />
+  </Target>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <SelfContained>true</SelfContained>
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+    <UapAppxPackageBuildMode>SideloadOnly</UapAppxPackageBuildMode>
+    <AppxBundle>Never</AppxBundle>
+    <AppxPackageDir>$(MSBuildThisFileDirectory)AppPackages\</AppxPackageDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\**">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

@@ -7,5 +7,7 @@
   <Project Path="FlickrSlideshow.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>
-  <Project Path="FlickrSlideshow.Xbox\FlickrSlideshow.Xbox.csproj" Id="34a25741-7e9a-4b9c-9e75-3142b945ec93" />
+  <Project Path="FlickrSlideshow.Xbox2/FlickrSlideshow.Xbox2.csproj">
+    <Platform Project="x64" />
+  </Project>
 </Solution>

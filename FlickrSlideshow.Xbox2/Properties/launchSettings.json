@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "FlickrSlideshow.Xbox2": {
+      "commandName": "Project",
+      "remoteDebugEnabled": true,
+      "remoteDebugMachine": "192.168.86.172:11443",
+      "authenticationMode": "Windows"
+    }
+  }
+}

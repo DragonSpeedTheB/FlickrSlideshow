@@ -3,6 +3,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Xbox deploy credentials (copy from Deploy-Xbox.config.template.ps1)
+Deploy-Xbox.config.ps1
+
 # User-specific files
 *.rsuser
 *.suo

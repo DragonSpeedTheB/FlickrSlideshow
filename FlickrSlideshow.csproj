@@ -33,9 +33,13 @@
     <!-- Exclude sub-projects' folders — compiled as separate projects -->
     <Compile Remove="FlickrSlideshow.Core\**" />
     <Compile Remove="FlickrSlideshow.Xbox\**" />
+    <Compile Remove="FlickrSlideshow.Xbox2\**" />
     <Page Remove="FlickrSlideshow.Xbox\**" />
+    <Page Remove="FlickrSlideshow.Xbox2\**" />
     <EmbeddedResource Remove="FlickrSlideshow.Xbox\**" />
+    <EmbeddedResource Remove="FlickrSlideshow.Xbox2\**" />
     <None Remove="FlickrSlideshow.Xbox\**" />
+    <None Remove="FlickrSlideshow.Xbox2\**" />
     <!-- These files' content now lives in Core; keep as None so VS shows them -->
     <Compile Remove="FlickrService.cs" />
     <Compile Remove="FlickrModels.cs" />
@@ -55,6 +59,7 @@
   <ItemGroup>
     <None Include=".github\copilot-instructions.md" />
     <None Include="FlickrSlideshow.Core\FlickrSlideshow.Core.csproj" />
+    <None Include="FlickrSlideshow.Xbox2\FlickrSlideshow.Xbox2.csproj" />
     <None Include="FlickrSlideshow.Xbox\FlickrSlideshow.Xbox.csproj" />
   </ItemGroup>
 
