@@ -18,8 +18,6 @@ public sealed partial class SlideshowPage : Page
 {
     private readonly AppState _state = AppState.Instance;
     private CancellationTokenSource? _cts;
-    private bool _paused;
-    private bool _quitOpen;
     private static readonly TimeSpan SlideDuration = TimeSpan.FromSeconds(8);
     private readonly System.Net.Http.HttpClient _http = new();
 
@@ -33,10 +31,6 @@ public sealed partial class SlideshowPage : Page
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        _paused = false;
-        PausedOverlay.Visibility = Visibility.Collapsed;
-        PausedIndicator.Visibility = Visibility.Collapsed;
-
         try { ApplicationView.GetForCurrentView().TryEnterFullScreenMode(); } catch { }
         try { Window.Current.CoreWindow.PointerCursor = null; } catch { }
 
@@ -76,9 +70,6 @@ public sealed partial class SlideshowPage : Page
         {
             try { await Task.Delay(SlideDuration, token); }
             catch (TaskCanceledException) { break; }
-
-            while (_paused && !token.IsCancellationRequested)
-                await Task.Delay(200, token).ConfigureAwait(false);
 
             if (token.IsCancellationRequested) break;
 
@@ -126,45 +117,10 @@ public sealed partial class SlideshowPage : Page
         catch { }
     }
 
-    // ── Pause / Resume ────────────────────────────────────────────────
-
-    private void SetPaused(bool paused)
-    {
-        _paused = paused;
-        PausedIndicator.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void ResumeButton_Click(object sender, RoutedEventArgs e)
-    {
-        PausedOverlay.Visibility = Visibility.Collapsed;
-        SetPaused(false);
-    }
-
-    private void BackToSettings_Click(object sender, RoutedEventArgs e)
-    {
-        Frame.GoBack();
-    }
-
-    // ── Quit prompt ───────────────────────────────────────────────────
-
-    private void ShowQuit()
-    {
-        _quitOpen = true;
-        _paused = true;
-        QuitOverlay.Visibility = Visibility.Visible;
-        _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
-            QuitYesButton.Focus(FocusState.Programmatic));
-    }
-
-    private void DismissQuit()
-    {
-        _quitOpen = false;
-        QuitOverlay.Visibility = Visibility.Collapsed;
-        SetPaused(false);
-    }
-
+    private void ResumeButton_Click(object sender, RoutedEventArgs e) { }
+    private void BackToSettings_Click(object sender, RoutedEventArgs e) => Frame.GoBack();
     private void QuitYes_Click(object sender, RoutedEventArgs e) => Application.Current.Exit();
-    private void QuitNo_Click(object sender, RoutedEventArgs e) => DismissQuit();
+    private void QuitNo_Click(object sender, RoutedEventArgs e) { }
 
     // ── Compositor keep-alive (perpetual Storyboard) ──────────────────
 
@@ -188,67 +144,12 @@ public sealed partial class SlideshowPage : Page
 
     private void OnKeyDown(CoreWindow sender, KeyEventArgs e)
     {
-        if (_quitOpen)
+        if (e.VirtualKey == Windows.System.VirtualKey.GamepadB ||
+            e.VirtualKey == Windows.System.VirtualKey.Escape)
         {
-            if (e.VirtualKey == Windows.System.VirtualKey.GamepadA) { QuitYes_Click(null!, null!); e.Handled = true; }
-            else if (e.VirtualKey == Windows.System.VirtualKey.GamepadB) { DismissQuit(); e.Handled = true; }
-            return;
-        }
-
-        switch (e.VirtualKey)
-        {
-            case Windows.System.VirtualKey.GamepadMenu:
-            case Windows.System.VirtualKey.GamepadView:
-                // Toggle paused overlay (back to settings style)
-                if (_paused)
-                {
-                    PausedOverlay.Visibility = Visibility.Collapsed;
-                    SetPaused(false);
-                }
-                else
-                {
-                    SetPaused(true);
-                    PausedOverlay.Visibility = Visibility.Visible;
-                    _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
-                        ResumeButton.Focus(FocusState.Programmatic));
-                }
-                e.Handled = true;
-                break;
-
-            case Windows.System.VirtualKey.GamepadA:
-            case Windows.System.VirtualKey.Space:
-                SetPaused(!_paused);
-                PausedOverlay.Visibility = Visibility.Collapsed;
-                e.Handled = true;
-                break;
-
-            case Windows.System.VirtualKey.GamepadB:
-            case Windows.System.VirtualKey.Escape:
-                if (_paused) ShowQuit();
-                else { SetPaused(true); PausedOverlay.Visibility = Visibility.Visible;
-                    _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, () => ResumeButton.Focus(FocusState.Programmatic)); }
-                e.Handled = true;
-                break;
-
-            case Windows.System.VirtualKey.GamepadDPadRight:
-            case Windows.System.VirtualKey.Right:
-                _cts?.Cancel();
-                _cts = new CancellationTokenSource();
-                var nextPhotos = _state.Photos;
-                _ = Task.Run(async () =>
-                {
-                    var i = (Array.IndexOf(nextPhotos.ToArray(), null) + 1) % nextPhotos.Count;
-                    // just restart loop from next position
-                });
-                StartLoop();
-                e.Handled = true;
-                break;
-
-            case Windows.System.VirtualKey.GamepadDPadLeft:
-            case Windows.System.VirtualKey.Left:
-                StartLoop();
-                e.Handled = true;
-                break;
+            e.Handled = true;
+            if (Frame.CanGoBack)
+                Frame.GoBack();
         }
     }
 

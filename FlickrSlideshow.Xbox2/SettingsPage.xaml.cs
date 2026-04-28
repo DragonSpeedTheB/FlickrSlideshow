@@ -33,9 +33,10 @@ public sealed partial class SettingsPage : Page
         {
             StatusText.Text = "Loading...";
             await _state.LoadApiKeyAsync();
-            _state.LoadRecentUsers();
             StatusText.Text = "";
         }
+
+        await _state.LoadRecentUsersAsync();
 
         RefreshUserCombo();
         UpdateButtons();
@@ -91,7 +92,11 @@ public sealed partial class SettingsPage : Page
         StatusText.Text = $"Looking up {name}...";
         var ok = await _state.AddUserAsync(name);
         StatusText.Text = ok ? $"Selected: {name}" : "User not found.";
-        if (ok) UsernameBox.Text = "";
+        if (ok)
+        {
+            UsernameBox.Text = "";
+            _state.SaveRecentUsers();
+        }
         UpdateButtons();
     }
 

@@ -34,13 +34,6 @@ public class AppState
             ApiKey = doc.RootElement.GetProperty("Flickr").GetProperty("ApiKey").GetString() ?? "";
         }
         catch (Exception ex) { App.Log("ApiKey error: " + ex.Message); }
-
-        // Resolve default user ID if it hasn't been looked up yet
-        if (RecentUsers.Count == 0 && !string.IsNullOrEmpty(ApiKey))
-        {
-            App.Log("No users found, seeding default user dragonspeed...");
-            await AddUserAsync("dragonspeed");
-        }
     }
 
     // ── Recent users ────────────────────────────────────────────────────
@@ -50,23 +43,48 @@ public class AppState
 
     public event Action? UsersChanged;
 
-    public void LoadRecentUsers()
+    private static string UsersFilePath =>
+        Path.Combine(ApplicationData.Current.LocalFolder.Path, "users.json");
+
+    private static string LastUserFilePath =>
+        Path.Combine(ApplicationData.Current.LocalFolder.Path, "lastuser.txt");
+
+    private bool _usersLoaded = false;
+
+    public async Task LoadRecentUsersAsync()
+    {
+        if (_usersLoaded) return;
+        _usersLoaded = true;
+
+        try
+        {
+            if (File.Exists(UsersFilePath))
+                RecentUsers = JsonSerializer.Deserialize<List<FlickrUser>>(File.ReadAllText(UsersFilePath)) ?? new();
+        }
+        catch (Exception ex) { App.Log("LoadRecentUsers error: " + ex.Message); RecentUsers = new(); }
+
+        try
+        {
+            var lastId = File.Exists(LastUserFilePath) ? File.ReadAllText(LastUserFilePath).Trim() : null;
+            if (!string.IsNullOrEmpty(lastId))
+                CurrentUser = RecentUsers.Find(u => u.Id == lastId);
+        }
+        catch { }
+
+        // Seed default user only if no users were loaded from disk
+        if (RecentUsers.Count == 0 && !string.IsNullOrEmpty(ApiKey))
+            await AddUserAsync("dragonspeed");
+    }
+
+    public void SaveRecentUsers()
     {
         try
         {
-            var json = ApplicationData.Current.LocalSettings.Values["RecentUsers"] as string;
-            if (!string.IsNullOrEmpty(json))
-                RecentUsers = JsonSerializer.Deserialize<List<FlickrUser>>(json) ?? new();
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            File.WriteAllText(UsersFilePath, JsonSerializer.Serialize(RecentUsers, options));
         }
-        catch { RecentUsers = new(); }
-
-        var lastId = ApplicationData.Current.LocalSettings.Values["LastUserId"] as string;
-        if (!string.IsNullOrEmpty(lastId))
-            CurrentUser = RecentUsers.Find(u => u.Id == lastId);
+        catch (Exception ex) { App.Log("SaveRecentUsers error: " + ex.Message); }
     }
-
-    public void SaveRecentUsers() =>
-        ApplicationData.Current.LocalSettings.Values["RecentUsers"] = JsonSerializer.Serialize(RecentUsers);
 
     public void SelectUser(FlickrUser user)
     {
@@ -74,7 +92,8 @@ public class AppState
         RecentUsers.RemoveAll(u => u.Id == user.Id);
         RecentUsers.Insert(0, user);
         SaveRecentUsers();
-        ApplicationData.Current.LocalSettings.Values["LastUserId"] = user.Id;
+        try { File.WriteAllText(LastUserFilePath, user.Id); }
+        catch (Exception ex) { App.Log("SaveLastUser error: " + ex.Message); }
         UsersChanged?.Invoke();
     }
 
