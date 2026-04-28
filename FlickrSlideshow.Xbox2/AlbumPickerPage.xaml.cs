@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using FlickrSlideshow.Core;
 using Windows.UI.Core;
+using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
@@ -19,6 +20,11 @@ public sealed partial class AlbumPickerPage : Page
     {
         this.InitializeComponent();
         Window.Current.CoreWindow.KeyDown += OnKeyDown;
+        FilterBox.PointerPressed += (s, e) =>
+        {
+            FilterBox.Focus(FocusState.Pointer);
+            try { InputPane.GetForCurrentView().TryShow(); } catch { }
+        };
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -39,7 +45,10 @@ public sealed partial class AlbumPickerPage : Page
         RebuildList(_allItems);
 
         _ = Dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
-            AlbumList.Focus(FocusState.Programmatic));
+        {
+            try { InputPane.GetForCurrentView().TryHide(); } catch { }
+            AlbumList.Focus(FocusState.Programmatic);
+        });
     }
 
     private void RebuildList(List<AlbumItem> items)

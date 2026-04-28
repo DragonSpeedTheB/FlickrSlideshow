@@ -23,6 +23,11 @@ public sealed partial class SettingsPage : Page
         {
             try { InputPane.GetForCurrentView().TryShow(); } catch { }
         };
+        UsernameBox.PointerPressed += (s, e) =>
+        {
+            UsernameBox.Focus(FocusState.Pointer);
+            try { InputPane.GetForCurrentView().TryShow(); } catch { }
+        };
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)

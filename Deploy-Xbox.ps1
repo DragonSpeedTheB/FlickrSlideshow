@@ -61,7 +61,7 @@ $headers = @{ Authorization = "Basic $cred" }
 # Uninstall any existing version of the package before deploying
 Write-Host "Checking for existing installation..."
 $packages = Invoke-RestMethod -Uri "$baseUri/api/app/packagemanager/packages" -Headers $headers -SkipCertificateCheck
-$existing = $packages.InstalledPackages | Where-Object { $_.PackageFamilyName -eq "FlickrSlideshow.Xbox2" }
+$existing = $packages.InstalledPackages | Where-Object { $_.PackageFamilyName -like "Dragonspeed.FlickrSlideshowRandomizer*" -or $_.PackageFamilyName -like "FlickrSlideshow.Xbox2*" }
 foreach ($pkg in $existing) {
     Write-Host "Uninstalling $($pkg.PackageFullName)..."
     Invoke-RestMethod -Uri "$baseUri/api/app/packagemanager/package?package=$([System.Web.HttpUtility]::UrlEncode($pkg.PackageFullName))" -Method DELETE -Headers $headers -SkipCertificateCheck | Out-Null
