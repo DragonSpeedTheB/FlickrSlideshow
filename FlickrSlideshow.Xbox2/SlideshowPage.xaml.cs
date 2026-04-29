@@ -19,7 +19,6 @@ public sealed partial class SlideshowPage : Page
     private readonly AppState _state = AppState.Instance;
     private CancellationTokenSource? _cts;
     private static readonly TimeSpan SlideDuration = TimeSpan.FromSeconds(8);
-    private System.Net.Http.HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     public SlideshowPage()
     {
@@ -58,6 +57,22 @@ public sealed partial class SlideshowPage : Page
 
     private async Task RunLoopAsync(System.Collections.Generic.List<FlickrPhoto> photos, CancellationToken token)
     {
+        try
+        {
+            await RunLoopCoreAsync(photos, token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            App.Log("RunLoopAsync fatal: " + ex);
+            // Restart the loop after brief delay so a transient failure doesn't kill the slideshow
+            try { await Task.Delay(2000, token); } catch { return; }
+            if (!token.IsCancellationRequested) _ = RunLoopAsync(photos, token);
+        }
+    }
+
+    private async Task RunLoopCoreAsync(System.Collections.Generic.List<FlickrPhoto> photos, CancellationToken token)
+    {
         if (photos.Count == 0) return;
 
         int index = 0;
@@ -86,23 +101,15 @@ public sealed partial class SlideshowPage : Page
             cts.CancelAfter(TimeSpan.FromSeconds(30));
 
             byte[] bytes;
-            try
-            {
-                bytes = await _http.GetByteArrayAsync(photo.Url, cts.Token);
-            }
-            catch (ObjectDisposedException)
-            {
-                // SSL connection was disposed — create a fresh HttpClient and retry once
-                _http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-                bytes = await _http.GetByteArrayAsync(photo.Url, cts.Token);
-            }
+            using (var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) })
+                bytes = await http.GetByteArrayAsync(photo.Url, cts.Token);
             if (token.IsCancellationRequested) return;
 
             BitmapImage? bitmap = null;
             try
             {
                 bitmap = new BitmapImage();
-                using var ms = new InMemoryRandomAccessStream();
+                var ms = new InMemoryRandomAccessStream();
                 using (var w = new DataWriter(ms.GetOutputStreamAt(0)))
                 {
                     w.WriteBytes(bytes);
@@ -110,6 +117,7 @@ public sealed partial class SlideshowPage : Page
                 }
                 ms.Seek(0);
                 await bitmap.SetSourceAsync(ms);
+                ms.Dispose(); // dispose only after SetSourceAsync completes
             }
             catch (Exception ex)
             {
