@@ -1,4 +1,6 @@
 using System;
+using System.Net;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using FlickrSlideshow.Core;
@@ -19,7 +21,6 @@ public sealed partial class SlideshowPage : Page
     private readonly AppState _state = AppState.Instance;
     private CancellationTokenSource? _cts;
     private static readonly TimeSpan SlideDuration = TimeSpan.FromSeconds(8);
-    private System.Net.Http.HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     public SlideshowPage()
     {
@@ -58,6 +59,22 @@ public sealed partial class SlideshowPage : Page
 
     private async Task RunLoopAsync(System.Collections.Generic.List<FlickrPhoto> photos, CancellationToken token)
     {
+        try
+        {
+            await RunLoopCoreAsync(photos, token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            App.Log("RunLoopAsync fatal: " + ex);
+            // Restart the loop after brief delay so a transient failure doesn't kill the slideshow
+            try { await Task.Delay(2000, token); } catch { return; }
+            if (!token.IsCancellationRequested) _ = RunLoopAsync(photos, token);
+        }
+    }
+
+    private async Task RunLoopCoreAsync(System.Collections.Generic.List<FlickrPhoto> photos, CancellationToken token)
+    {
         if (photos.Count == 0) return;
 
         int index = 0;
@@ -80,65 +97,119 @@ public sealed partial class SlideshowPage : Page
 
     private async Task ShowPhotoAsync(FlickrPhoto photo, CancellationToken token)
     {
-        try
+        int[] rateLimitWaitSeconds = { 30, 60, 120 };
+
+        for (int attempt = 0; ; attempt++)
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            cts.CancelAfter(TimeSpan.FromSeconds(30));
-
-            byte[] bytes;
             try
             {
-                bytes = await _http.GetByteArrayAsync(photo.Url, cts.Token);
-            }
-            catch (ObjectDisposedException)
-            {
-                // SSL connection was disposed — create a fresh HttpClient and retry once
-                _http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-                bytes = await _http.GetByteArrayAsync(photo.Url, cts.Token);
-            }
-            if (token.IsCancellationRequested) return;
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                cts.CancelAfter(TimeSpan.FromSeconds(30));
 
-            BitmapImage? bitmap = null;
-            try
-            {
-                bitmap = new BitmapImage();
-                using var ms = new InMemoryRandomAccessStream();
-                using (var w = new DataWriter(ms.GetOutputStreamAt(0)))
+                byte[] bytes;
+                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) })
                 {
-                    w.WriteBytes(bytes);
-                    await w.StoreAsync();
+                    var response = await http.GetAsync(photo.Url, cts.Token);
+
+                    if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                    {
+                        if (attempt >= rateLimitWaitSeconds.Length)
+                        {
+                            App.Log("ShowPhotoAsync: rate limit retries exhausted, skipping photo.");
+                            return;
+                        }
+
+                        int wait = rateLimitWaitSeconds[attempt];
+                        if (response.Headers.RetryAfter?.Delta is TimeSpan delta)
+                            wait = Math.Max(wait, (int)delta.TotalSeconds);
+
+                        App.Log($"ShowPhotoAsync: rate limited (429), waiting {wait}s before retry {attempt + 1}.");
+                        await ShowRateLimitNoticeAsync(wait, token);
+                        continue;
+                    }
+
+                    response.EnsureSuccessStatusCode();
+                    bytes = await response.Content.ReadAsByteArrayAsync(cts.Token);
                 }
-                ms.Seek(0);
-                await bitmap.SetSourceAsync(ms);
-            }
-            catch (Exception ex)
-            {
-                App.Log("Image decode error: " + ex.Message);
-                return;
-            }
 
-            if (token.IsCancellationRequested) return;
+                // Rate limit resolved — hide the banner if it was visible
+                await HideRateLimitNoticeAsync();
 
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-            {
+                if (token.IsCancellationRequested) return;
+
+                BitmapImage? bitmap = null;
                 try
                 {
-                    SlideImage.Source = bitmap;
-                    CaptionText.Text = photo.Title ?? "";
-                    LoadingText.Visibility = Visibility.Collapsed;
-
-                    var da = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromSeconds(1.5) };
-                    Storyboard.SetTarget(da, SlideImage);
-                    Storyboard.SetTargetProperty(da, "Opacity");
-                    var sb = new Storyboard();
-                    sb.Children.Add(da);
-                    sb.Begin();
+                    bitmap = new BitmapImage();
+                    var ms = new InMemoryRandomAccessStream();
+                    using (var w = new DataWriter(ms.GetOutputStreamAt(0)))
+                    {
+                        w.WriteBytes(bytes);
+                        await w.StoreAsync();
+                    }
+                    ms.Seek(0);
+                    await bitmap.SetSourceAsync(ms);
+                    ms.Dispose(); // dispose only after SetSourceAsync completes
                 }
-                catch (Exception ex) { App.Log("UI update error: " + ex.Message); }
-            });
+                catch (Exception ex)
+                {
+                    App.Log("Image decode error: " + ex.Message);
+                    return;
+                }
+
+                if (token.IsCancellationRequested) return;
+
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                {
+                    try
+                    {
+                        SlideImage.Source = bitmap;
+                        CaptionText.Text = photo.Title ?? "";
+                        LoadingText.Visibility = Visibility.Collapsed;
+
+                        var da = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromSeconds(1.5) };
+                        Storyboard.SetTarget(da, SlideImage);
+                        Storyboard.SetTargetProperty(da, "Opacity");
+                        var sb = new Storyboard();
+                        sb.Children.Add(da);
+                        sb.Begin();
+                    }
+                    catch (Exception ex) { App.Log("UI update error: " + ex.Message); }
+                });
+
+                return; // success
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex) { App.Log("ShowPhotoAsync error: " + ex.Message); return; }
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { App.Log("ShowPhotoAsync error: " + ex.Message); }
+    }
+
+    /// <summary>Shows the rate-limit banner and counts down, then hides it.</summary>
+    private async Task ShowRateLimitNoticeAsync(int waitSeconds, CancellationToken token)
+    {
+        for (int remaining = waitSeconds; remaining > 0; remaining--)
+        {
+            if (token.IsCancellationRequested) return;
+
+            int snap = remaining;
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            {
+                RateLimitText.Text = $"⚠ Flickr rate limit reached — retrying in {snap}s…";
+                RateLimitBanner.Visibility = Visibility.Visible;
+            });
+
+            try { await Task.Delay(1000, token); }
+            catch (OperationCanceledException) { return; }
+        }
+    }
+
+    /// <summary>Hides the rate-limit banner.</summary>
+    private async Task HideRateLimitNoticeAsync()
+    {
+        await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+        {
+            RateLimitBanner.Visibility = Visibility.Collapsed;
+        });
     }
 
     private void ResumeButton_Click(object sender, RoutedEventArgs e) { }

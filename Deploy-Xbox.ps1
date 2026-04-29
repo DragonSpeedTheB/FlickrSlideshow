@@ -3,7 +3,9 @@
 # Reads connection settings from Deploy-Xbox.config.ps1 (not committed to source control).
 
 param(
-    [string]$PackagePath
+    [string]$PackagePath,
+    [ValidateSet('Debug','Release')]
+    [string]$Configuration = 'Release'
 )
 
 $configFile = "$PSScriptRoot\Deploy-Xbox.config.ps1"
@@ -14,7 +16,7 @@ if (-not (Test-Path $configFile)) {
 . $configFile
 
 if (-not $PackagePath) {
-    $buildOutput = "$PSScriptRoot\FlickrSlideshow.Xbox2\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64"
+    $buildOutput = "$PSScriptRoot\FlickrSlideshow.Xbox2\bin\x64\$Configuration\net10.0-windows10.0.26100.0\win-x64"
     $msixOut     = "$PSScriptRoot\FlickrSlideshow.Xbox2\AppPackages"
     $msixPath    = "$msixOut\FlickrSlideshow.Xbox2.msix"
     $makeappx    = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe"
@@ -22,7 +24,7 @@ if (-not $PackagePath) {
     $certPath    = "$PSScriptRoot\FlickrSlideshow.Xbox2\DevCert.pfx"
 
     if (-not (Test-Path $buildOutput)) {
-        Write-Error "Build output not found at $buildOutput. Build the project (Release x64) first."
+        Write-Error "Build output not found at $buildOutput. Build the project ($Configuration x64) first."
         exit 1
     }
 

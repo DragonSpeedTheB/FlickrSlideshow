@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace FlickrSlideshow.Core
@@ -12,10 +14,47 @@ namespace FlickrSlideshow.Core
         private readonly string _userId;
         private readonly HttpClient _http = new();
 
+        /// <summary>
+        /// Raised when a 429 rate-limit response is received. Reports the wait duration in seconds.
+        /// </summary>
+        public event Action<int>? RateLimited;
+
         public FlickrService(string apiKey, string userId)
         {
             _apiKey = apiKey;
             _userId = userId;
+        }
+
+        /// <summary>
+        /// Performs a GET request, retrying up to 3 times with exponential backoff on HTTP 429.
+        /// Raises <see cref="RateLimited"/> before each wait so callers can show a notice.
+        /// Throws <see cref="FlickrRateLimitException"/> if all retries are exhausted.
+        /// </summary>
+        private async Task<string> GetStringWithRetryAsync(string url, CancellationToken cancellationToken = default)
+        {
+            int[] waitSeconds = { 30, 60, 120 };
+
+            for (int attempt = 0; ; attempt++)
+            {
+                var response = await _http.GetAsync(url, cancellationToken).ConfigureAwait(false);
+
+                if (response.StatusCode != HttpStatusCode.TooManyRequests)
+                {
+                    response.EnsureSuccessStatusCode();
+                    return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                if (attempt >= waitSeconds.Length)
+                    throw new FlickrRateLimitException(TimeSpan.FromSeconds(waitSeconds[^1]));
+
+                // Honour Retry-After header when present, otherwise use backoff table
+                int wait = waitSeconds[attempt];
+                if (response.Headers.RetryAfter?.Delta is TimeSpan delta)
+                    wait = Math.Max(wait, (int)delta.TotalSeconds);
+
+                RateLimited?.Invoke(wait);
+                await Task.Delay(TimeSpan.FromSeconds(wait), cancellationToken).ConfigureAwait(false);
+            }
         }
 
         /// <summary>
@@ -30,7 +69,7 @@ namespace FlickrSlideshow.Core
                 $"&user_id={_userId}" + 
                 $"&format=json&nojsoncallback=1";
 
-            var json = await _http.GetStringAsync(url);
+            var json = await GetStringWithRetryAsync(url);
             using var doc = JsonDocument.Parse(json);
 
             var sets = doc.RootElement
@@ -62,7 +101,7 @@ namespace FlickrSlideshow.Core
                 $"&user_id={_userId}" +
                 $"&format=json&nojsoncallback=1";
 
-            var json = await _http.GetStringAsync(url);
+            var json = await GetStringWithRetryAsync(url);
             using var doc = JsonDocument.Parse(json);
 
             if (!doc.RootElement.TryGetProperty("collections", out var root))
@@ -135,7 +174,7 @@ namespace FlickrSlideshow.Core
                     $"&page={page}" +
                     $"&format=json&nojsoncallback=1";
 
-                var json = await _http.GetStringAsync(url);
+                var json = await GetStringWithRetryAsync(url);
                 using var doc = JsonDocument.Parse(json);
 
                 var photosNode = doc.RootElement.GetProperty("photos");
@@ -214,7 +253,7 @@ namespace FlickrSlideshow.Core
                     parameters.Select(kvp => $"{kvp.Key}={Uri.EscapeDataString(kvp.Value)}"));
 
                 var requestUrl = $"https://api.flickr.com/services/rest/?{query}";
-                var json = await _http.GetStringAsync(requestUrl);
+                var json = await GetStringWithRetryAsync(requestUrl);
 
                 using var doc = JsonDocument.Parse(json);
 
@@ -297,7 +336,7 @@ namespace FlickrSlideshow.Core
                     $"&page={page}" +
                     $"&format=json&nojsoncallback=1";
 
-                var json = await _http.GetStringAsync(url);
+                var json = await GetStringWithRetryAsync(url);
                 using var doc = JsonDocument.Parse(json);
 
                 if (!doc.RootElement.TryGetProperty("photoset", out var photosetNode))
@@ -346,7 +385,7 @@ namespace FlickrSlideshow.Core
                       $"&username={Uri.EscapeDataString(username)}" +
                       "&format=json&nojsoncallback=1";
 
-            var json = await _http.GetStringAsync(url);
+            var json = await GetStringWithRetryAsync(url);
             using var doc = JsonDocument.Parse(json);
 
             if (doc.RootElement.GetProperty("stat").GetString() != "ok")
@@ -367,7 +406,7 @@ namespace FlickrSlideshow.Core
                       $"&photo_id={Uri.EscapeDataString(photoId)}" +
                       "&format=json&nojsoncallback=1";
 
-            var json = await _http.GetStringAsync(url);
+            var json = await GetStringWithRetryAsync(url);
             using var doc = JsonDocument.Parse(json);
 
             if (doc.RootElement.GetProperty("stat").GetString() != "ok")

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.Storage;
@@ -19,6 +20,15 @@ sealed partial class App : Application
         {
             Log("UNHANDLED: " + e.Exception);
             e.Handled = true;
+        };
+        TaskScheduler.UnobservedTaskException += (s, e) =>
+        {
+            Log("UNOBSERVED TASK: " + e.Exception);
+            e.SetObserved();
+        };
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            Log("APPDOMAIN UNHANDLED: " + e.ExceptionObject);
         };
     }
 

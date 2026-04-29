@@ -119,6 +119,7 @@ public class AppState
         if (CurrentUser == null) return "No user selected";
         var svc = new FlickrService(ApiKey, CurrentUser.Id);
         Photos = await svc.GetAllPublicPhotos(progress);
+        Shuffle = true;
         return $"{Photos.Count} photos loaded";
     }
 
@@ -126,7 +127,7 @@ public class AppState
     {
         var svc = new FlickrService(ApiKey, "");
         Photos = await svc.GetExplorePhotos(500);
-        Shuffle = false;
+        Shuffle = true;
         return $"Explore: {Photos.Count} photos";
     }
 
