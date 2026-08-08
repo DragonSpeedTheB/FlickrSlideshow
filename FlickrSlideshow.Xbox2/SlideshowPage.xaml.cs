@@ -107,7 +107,7 @@ public sealed partial class SlideshowPage : Page
                 cts.CancelAfter(TimeSpan.FromSeconds(30));
 
                 byte[] bytes;
-                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) })
+                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) })
                 {
                     var response = await http.GetAsync(photo.Url, cts.Token);
 
@@ -124,7 +124,7 @@ public sealed partial class SlideshowPage : Page
                             wait = Math.Max(wait, (int)delta.TotalSeconds);
 
                         App.Log($"ShowPhotoAsync: rate limited (429), waiting {wait}s before retry {attempt + 1}.");
-                        await ShowRateLimitNoticeAsync(wait, token);
+                        await ShowRateLimitNoticeAsync(wait, photo.Url, token);
                         continue;
                     }
 
@@ -185,8 +185,10 @@ public sealed partial class SlideshowPage : Page
     }
 
     /// <summary>Shows the rate-limit banner and counts down, then hides it.</summary>
-    private async Task ShowRateLimitNoticeAsync(int waitSeconds, CancellationToken token)
+    private async Task ShowRateLimitNoticeAsync(int waitSeconds, string url, CancellationToken token)
     {
+        bool debug = AppState.Instance.DebugOutput;
+
         for (int remaining = waitSeconds; remaining > 0; remaining--)
         {
             if (token.IsCancellationRequested) return;
@@ -194,7 +196,9 @@ public sealed partial class SlideshowPage : Page
             int snap = remaining;
             await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
             {
-                RateLimitText.Text = $"⚠ Flickr rate limit reached — retrying in {snap}s…";
+                RateLimitText.Text = debug
+                    ? $"429 {url}\nAPI rate limited - trying again in {snap}s"
+                    : $"⚠ Rate limited — retrying in {snap}s";
                 RateLimitBanner.Visibility = Visibility.Visible;
             });
 

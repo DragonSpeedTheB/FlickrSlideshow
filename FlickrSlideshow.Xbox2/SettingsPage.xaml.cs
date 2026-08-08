@@ -41,6 +41,9 @@ public sealed partial class SettingsPage : Page
             StatusText.Text = "";
         }
 
+        _state.LoadDebugFlag();
+        DebugOutputCheckBox.IsChecked = _state.DebugOutput;
+
         await _state.LoadRecentUsersAsync();
 
         RefreshUserCombo();
@@ -145,6 +148,12 @@ public sealed partial class SettingsPage : Page
         AllPhotosButton.IsEnabled = false;
         PickAlbumsButton.IsEnabled = false;
         ExploreButton.IsEnabled = false;
+    }
+
+    private void DebugOutput_Changed(object sender, RoutedEventArgs e)
+    {
+        _state.DebugOutput = DebugOutputCheckBox.IsChecked == true;
+        _state.SaveDebugFlag();
     }
 
     private void OnKeyDown(CoreWindow sender, KeyEventArgs e)
