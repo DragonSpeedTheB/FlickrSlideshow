@@ -20,8 +20,8 @@ public sealed partial class SlideshowPage : Page
 {
     private readonly AppState _state = AppState.Instance;
     private CancellationTokenSource? _cts;
-    private static readonly TimeSpan SlideDuration = TimeSpan.FromSeconds(8);
 
+    private TimeSpan SlideDuration => TimeSpan.FromSeconds(_state.SlideDurationSeconds);
     public SlideshowPage()
     {
         this.InitializeComponent();

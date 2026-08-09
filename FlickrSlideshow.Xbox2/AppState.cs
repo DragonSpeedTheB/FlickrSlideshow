@@ -55,6 +55,33 @@ public class AppState
         catch (Exception ex) { App.Log("SaveDebugFlag error: " + ex.Message); }
     }
 
+    // ── Slide duration ────────────────────────────────────────────────────────
+
+    public const int SlideDurationMin = 15;
+    public const int SlideDurationMax = 300;
+
+    public int SlideDurationSeconds { get; set; } = 15;
+
+    private static string SlideDurationPath =>
+        Path.Combine(ApplicationData.Current.LocalFolder.Path, "slideduration.txt");
+
+    public void LoadSlideDuration()
+    {
+        try
+        {
+            if (File.Exists(SlideDurationPath) &&
+                int.TryParse(File.ReadAllText(SlideDurationPath).Trim(), out int v))
+                SlideDurationSeconds = Math.Clamp(v, SlideDurationMin, SlideDurationMax);
+        }
+        catch { }
+    }
+
+    public void SaveSlideDuration()
+    {
+        try { File.WriteAllText(SlideDurationPath, SlideDurationSeconds.ToString()); }
+        catch (Exception ex) { App.Log("SaveSlideDuration error: " + ex.Message); }
+    }
+
     // ── Recent users ────────────────────────────────────────────────────
 
     public List<FlickrUser> RecentUsers { get; private set; } = new();

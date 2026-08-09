@@ -1,1 +1,13 @@
-<Page x:Class="FlickrSlideshow.Xbox2.SlideshowPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="Black"><Grid><Border x:Name="KeepAlive" Width="0" Height="0" Opacity="1"/><Image x:Name="SlideImage" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/><Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10" Background="#66000000" Padding="6,4"><TextBlock x:Name="CaptionText" Foreground="White" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="14" MaxWidth="900"/></Border><TextBlock x:Name="LoadingText" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="26" Foreground="White" TextAlignment="Center"/><Border x:Name="RateLimitBanner" Visibility="Collapsed" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,12,12" Background="#CC7B0000" Padding="10,5" CornerRadius="4"><TextBlock x:Name="RateLimitText" Foreground="White" FontSize="12" FontFamily="Consolas" TextAlignment="Left" TextWrapping="Wrap" MaxWidth="500"/></Border></Grid></Page>
+<Page x:Class="FlickrSlideshow.Xbox2.SlideshowPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="Black">
+    <Grid>
+        <Border x:Name="KeepAlive" Width="0" Height="0" Opacity="1"/>
+        <Image x:Name="SlideImage" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10" Background="#66000000" Padding="6,4">
+            <TextBlock x:Name="CaptionText" Foreground="White" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="14" MaxWidth="900"/>
+        </Border>
+        <TextBlock x:Name="LoadingText" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="26" Foreground="White" TextAlignment="Center"/>
+        <Border x:Name="RateLimitBanner" Visibility="Collapsed" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,12,12" Background="#CC7B0000" Padding="10,5" CornerRadius="4">
+            <TextBlock x:Name="RateLimitText" Foreground="White" FontSize="12" FontFamily="Consolas" TextAlignment="Left" TextWrapping="Wrap" MaxWidth="500"/>
+        </Border>
+    </Grid>
+</Page>

@@ -44,6 +44,9 @@ public sealed partial class SettingsPage : Page
         _state.LoadDebugFlag();
         DebugOutputCheckBox.IsChecked = _state.DebugOutput;
 
+        _state.LoadSlideDuration();
+        SlideDurationValue.Text = _state.SlideDurationSeconds.ToString();
+
         await _state.LoadRecentUsersAsync();
 
         RefreshUserCombo();
@@ -154,6 +157,20 @@ public sealed partial class SettingsPage : Page
     {
         _state.DebugOutput = DebugOutputCheckBox.IsChecked == true;
         _state.SaveDebugFlag();
+    }
+
+    private void SlideDurationDown_Click(object sender, RoutedEventArgs e)
+    {
+        _state.SlideDurationSeconds = Math.Max(AppState.SlideDurationMin, _state.SlideDurationSeconds - 5);
+        SlideDurationValue.Text = _state.SlideDurationSeconds.ToString();
+        _state.SaveSlideDuration();
+    }
+
+    private void SlideDurationUp_Click(object sender, RoutedEventArgs e)
+    {
+        _state.SlideDurationSeconds = Math.Min(AppState.SlideDurationMax, _state.SlideDurationSeconds + 5);
+        SlideDurationValue.Text = _state.SlideDurationSeconds.ToString();
+        _state.SaveSlideDuration();
     }
 
     private void OnKeyDown(CoreWindow sender, KeyEventArgs e)
