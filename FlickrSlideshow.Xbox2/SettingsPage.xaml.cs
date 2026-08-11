@@ -179,7 +179,28 @@ public sealed partial class SettingsPage : Page
             e.VirtualKey == Windows.System.VirtualKey.Escape)
         {
             e.Handled = true;
-            ShowQuit();
+            if (QuitOverlay.Visibility == Visibility.Visible)
+                DismissQuit();
+            else
+                ShowQuit();
+        }
+        else if (e.VirtualKey == Windows.System.VirtualKey.GamepadMenu)
+        {
+            e.Handled = true;
+            if (QuitOverlay.Visibility == Visibility.Visible)
+                DismissQuit();
+            else
+                ShowQuit();
+        }
+        else if (e.VirtualKey == Windows.System.VirtualKey.GamepadLeftShoulder)
+        {
+            e.Handled = true;
+            SlideDurationDown_Click(this, new RoutedEventArgs());
+        }
+        else if (e.VirtualKey == Windows.System.VirtualKey.GamepadRightShoulder)
+        {
+            e.Handled = true;
+            SlideDurationUp_Click(this, new RoutedEventArgs());
         }
     }
 

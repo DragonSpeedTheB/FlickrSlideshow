@@ -102,8 +102,13 @@ public sealed partial class AlbumPickerPage : Page
         if (e.VirtualKey == Windows.System.VirtualKey.GamepadB ||
             e.VirtualKey == Windows.System.VirtualKey.Escape)
         {
-            Frame.GoBack();
             e.Handled = true;
+            Frame.GoBack();
+        }
+        else if (e.VirtualKey == Windows.System.VirtualKey.GamepadMenu)
+        {
+            e.Handled = true;
+            Ok_Click(this, new RoutedEventArgs());
         }
     }
 

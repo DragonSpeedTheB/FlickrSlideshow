@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using FlickrSlideshow.Core;
+using Windows.System.Display;
 using Windows.UI.Core;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
@@ -20,20 +21,33 @@ public sealed partial class SlideshowPage : Page
 {
     private readonly AppState _state = AppState.Instance;
     private CancellationTokenSource? _cts;
+    private DisplayRequest? _displayRequest;
+    private DispatcherTimer? _pointerHideTimer;
 
     private TimeSpan SlideDuration => TimeSpan.FromSeconds(_state.SlideDurationSeconds);
     public SlideshowPage()
     {
         this.InitializeComponent();
         Window.Current.CoreWindow.KeyDown += OnKeyDown;
+        Window.Current.CoreWindow.PointerMoved += OnPointerMoved;
         StartCompositorKeepAlive();
+        InitPointerHideTimer();
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
         try { ApplicationView.GetForCurrentView().TryEnterFullScreenMode(); } catch { }
+        try { ApplicationView.GetForCurrentView().FullScreenSystemOverlayMode = FullScreenSystemOverlayMode.Minimal; } catch { }
         try { Window.Current.CoreWindow.PointerCursor = null; } catch { }
+
+        // Prevent the screen from dimming during the slideshow
+        try
+        {
+            _displayRequest = new DisplayRequest();
+            _displayRequest.RequestActive();
+        }
+        catch { }
 
         StartLoop();
     }
@@ -42,6 +56,11 @@ public sealed partial class SlideshowPage : Page
     {
         base.OnNavigatedFrom(e);
         _cts?.Cancel();
+        _pointerHideTimer?.Stop();
+
+        try { _displayRequest?.RequestRelease(); } catch { }
+        _displayRequest = null;
+
         try { ApplicationView.GetForCurrentView().ExitFullScreenMode(); } catch { }
         try { Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 0); } catch { }
     }
@@ -240,6 +259,27 @@ public sealed partial class SlideshowPage : Page
     }
 
     // ── Gamepad ───────────────────────────────────────────────────────
+
+    // ── Pointer auto-hide ──────────────────────────────────────────────────
+
+    private void InitPointerHideTimer()
+    {
+        _pointerHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        _pointerHideTimer.Tick += (_, _) =>
+        {
+            _pointerHideTimer.Stop();
+            try { Window.Current.CoreWindow.PointerCursor = null; } catch { }
+        };
+    }
+
+    private void OnPointerMoved(CoreWindow sender, PointerEventArgs e)
+    {
+        try { sender.PointerCursor ??= new CoreCursor(CoreCursorType.Arrow, 0); } catch { }
+        _pointerHideTimer?.Stop();
+        _pointerHideTimer?.Start();
+    }
+
+    // ── Gamepad ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private void OnKeyDown(CoreWindow sender, KeyEventArgs e)
     {

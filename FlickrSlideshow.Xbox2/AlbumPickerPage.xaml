@@ -10,7 +10,7 @@
         <TextBox Grid.Row="1" x:Name="FilterBox" FontSize="16" Padding="8" Margin="0,0,0,12" TextChanged="FilterBox_TextChanged" />
         <ListBox Grid.Row="2" x:Name="AlbumList" SelectionMode="Multiple" FontSize="16"/>
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button Background="Black" Foreground="White" Content="OK" Width="120" FontSize="16" Padding="8,10" Margin="0,0,12,0" Click="Ok_Click"/>
+            <Button Background="Black" Foreground="White" x:Name="OkButton" Content="OK" Width="120" FontSize="16" Padding="8,10" Margin="0,0,12,0" Click="Ok_Click"/>
             <Button Background="Black" Foreground="White" Content="Cancel" Width="120" FontSize="16" Padding="8,10" Click="Cancel_Click"/>
         </StackPanel>
     </Grid>
