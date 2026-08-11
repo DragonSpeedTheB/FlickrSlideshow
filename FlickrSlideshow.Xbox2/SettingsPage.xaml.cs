@@ -16,7 +16,6 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         this.InitializeComponent();
-        Window.Current.CoreWindow.KeyDown += OnKeyDown;
         _state.UsersChanged += RefreshUserCombo;
 
         UsernameBox.GotFocus += (s, e) =>
@@ -33,6 +32,7 @@ public sealed partial class SettingsPage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        Window.Current.CoreWindow.KeyDown += OnKeyDown;
 
         if (string.IsNullOrEmpty(_state.ApiKey))
         {
@@ -60,6 +60,12 @@ public sealed partial class SettingsPage : Page
             else
                 ExploreButton.Focus(FocusState.Programmatic);
         });
+    }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        Window.Current.CoreWindow.KeyDown -= OnKeyDown;
     }
 
     private void RefreshUserCombo()

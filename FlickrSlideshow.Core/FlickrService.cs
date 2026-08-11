@@ -14,6 +14,9 @@ namespace FlickrSlideshow.Core
         private readonly string _userId;
         private readonly HttpClient _http = new();
 
+        private const string EdgeUserAgent =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0";
+
         /// <summary>
         /// Raised when a 429 rate-limit response is received. Reports the wait duration in seconds.
         /// </summary>
@@ -23,6 +26,7 @@ namespace FlickrSlideshow.Core
         {
             _apiKey = apiKey;
             _userId = userId;
+            _http.DefaultRequestHeaders.UserAgent.ParseAdd(EdgeUserAgent);
         }
 
         /// <summary>

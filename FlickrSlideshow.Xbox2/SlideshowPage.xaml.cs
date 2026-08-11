@@ -128,6 +128,9 @@ public sealed partial class SlideshowPage : Page
                 byte[] bytes;
                 using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) })
                 {
+                    http.DefaultRequestHeaders.UserAgent.ParseAdd(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0");
+                    http.DefaultRequestHeaders.Referrer = new Uri("https://www.flickr.com/photos/dragonspeed/favorites/");
                     var response = await http.GetAsync(photo.Url, cts.Token);
 
                     if (response.StatusCode == HttpStatusCode.TooManyRequests)
