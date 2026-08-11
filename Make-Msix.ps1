@@ -1,5 +1,5 @@
 # Make-Msix.ps1 - Increment build version, pack the Xbox2 MSIX, and sign it for sideloading
-params(
+param(
     [switch]$signme
 )
 $manifestSrc = "C:\code\FlickrSlideshow\FlickrSlideshow.Xbox2\Package.appxmanifest"
@@ -12,12 +12,12 @@ $certPath    = "C:\code\FlickrSlideshow\FlickrSlideshow.Xbox2\DevCert.pfx"
 
 # ── Increment build number (Major.Minor.Build.Revision) in the source manifest ──
 $srcXml = Get-Content $manifestSrc -Raw
-if ($srcXml -match 'Version="(\d+)\.(\d+)\.(\d+)\.(\d+)"') {
+if ($srcXml -match '<Identity\b[^>]*\bVersion="(\d+)\.(\d+)\.(\d+)\.(\d+)"') {
     $major = [int]$Matches[1]; $minor = [int]$Matches[2]
     $build = [int]$Matches[3] + 1
     $rev   = [int]$Matches[4]
     $newVersion = "$major.$minor.$build.$rev"
-    $srcXml = $srcXml -replace 'Version="\d+\.\d+\.\d+\.\d+"', "Version=""$newVersion"""
+    $srcXml = $srcXml -replace '(<Identity\b[^>]*\bVersion=)"[\d.]+"', "`$1""$newVersion"""
     Set-Content $manifestSrc $srcXml -Encoding UTF8 -NoNewline
     Write-Host "Version bumped to $newVersion" -ForegroundColor Cyan
 } else {

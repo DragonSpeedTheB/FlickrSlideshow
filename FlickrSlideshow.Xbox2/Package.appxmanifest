@@ -19,9 +19,9 @@
 
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Universal"
-                        MinVersion="2.0.7.0"
+                        MinVersion="10.0.20100.0"
                         MaxVersionTested="10.0.26100.0" />
-      <TargetDeviceFamily Name="Windows.Xbox" MinVersion="2.0.7.0" MaxVersionTested="10.0.26100.0" />
+      <TargetDeviceFamily Name="Windows.Xbox" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
 </Dependencies>
 
   <Resources>
