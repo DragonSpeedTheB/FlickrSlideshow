@@ -34,12 +34,16 @@
     <Compile Remove="FlickrSlideshow.Core\**" />
     <Compile Remove="FlickrSlideshow.Xbox\**" />
     <Compile Remove="FlickrSlideshow.Xbox2\**" />
+    <Compile Remove="FlickrSlideshow.XboxTest\**" />
     <Page Remove="FlickrSlideshow.Xbox\**" />
     <Page Remove="FlickrSlideshow.Xbox2\**" />
+    <Page Remove="FlickrSlideshow.XboxTest\**" />
     <EmbeddedResource Remove="FlickrSlideshow.Xbox\**" />
     <EmbeddedResource Remove="FlickrSlideshow.Xbox2\**" />
+    <EmbeddedResource Remove="FlickrSlideshow.XboxTest\**" />
     <None Remove="FlickrSlideshow.Xbox\**" />
     <None Remove="FlickrSlideshow.Xbox2\**" />
+    <None Remove="FlickrSlideshow.XboxTest\**" />
     <!-- These files' content now lives in Core; keep as None so VS shows them -->
     <Compile Remove="FlickrService.cs" />
     <Compile Remove="FlickrModels.cs" />
@@ -60,6 +64,7 @@
     <None Include=".github\copilot-instructions.md" />
     <None Include="FlickrSlideshow.Core\FlickrSlideshow.Core.csproj" />
     <None Include="FlickrSlideshow.Xbox2\FlickrSlideshow.Xbox2.csproj" />
+    <None Include="FlickrSlideshow.XboxTest\FlickrSlideshow.XboxTest.csproj" />
     <None Include="FlickrSlideshow.Xbox\FlickrSlideshow.Xbox.csproj" />
   </ItemGroup>
 

@@ -1,0 +1,57 @@
+<Window x:Class="FlickrSlideshow.XboxTest.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Flickr Rate-Limit Timer" Height="520" Width="680"
+        ResizeMode="CanResizeWithGrip" WindowStartupLocation="CenterScreen">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="Flickr Rate-Limit Timer"
+                   FontSize="20" FontWeight="Bold" Margin="0,0,0,12"/>
+
+        <!-- User picker -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Flickr username:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="14"/>
+            <TextBox x:Name="UsernameBox" Width="220" FontSize="14" Padding="4"
+                     VerticalContentAlignment="Center"
+                     ToolTip="Leave blank to use Flickr Explore"/>
+            <TextBlock Text="(blank = Explore)" VerticalAlignment="Center"
+                       Margin="8,0,16,0" FontSize="12" Foreground="Gray"/>
+            <Button x:Name="StartButton" Content="Start" FontSize="14" Padding="16,4"
+                    Click="StartButton_Click"/>
+            <Label x:Name="lblGoodCount" Content="Number of fetched" Margin="27,0,0,0"/>
+        </StackPanel>
+
+        <!-- Scrollable log -->
+        <Border Grid.Row="2" BorderBrush="Gray" BorderThickness="1" Margin="0,0,0,12">
+            <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
+                <TextBlock x:Name="LogText" Padding="6" TextWrapping="Wrap"
+                           FontFamily="Consolas" FontSize="13"/>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Elapsed timer (shown only while rate-limited) -->
+        <TextBlock x:Name="TimerText" Grid.Row="3"
+                   FontSize="22" FontWeight="Bold" Foreground="Crimson"
+                   HorizontalAlignment="Center" Margin="0,0,0,12"
+                   Visibility="Collapsed"/>
+
+        <!-- Bottom buttons row -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center">
+            <Button x:Name="Show429Button" Content="Show Last 429 Response" FontSize="14" Padding="16,8"
+                    Margin="0,0,16,0" Visibility="Collapsed"
+                    Click="Show429Button_Click"/>
+            <Button x:Name="OkButton"
+                    Content="OK — Exit" FontSize="16" Padding="32,10"
+                    Visibility="Collapsed"
+                    Click="OkButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

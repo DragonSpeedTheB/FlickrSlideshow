@@ -10,4 +10,5 @@
   <Project Path="FlickrSlideshow.Xbox2/FlickrSlideshow.Xbox2.csproj">
     <Platform Project="x64" />
   </Project>
+  <Project Path="FlickrSlideshow.XboxTest/FlickrSlideshow.XboxTest.csproj" />
 </Solution>
