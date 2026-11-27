@@ -14,25 +14,31 @@ using System.Net.Http;
 using System.Collections.Concurrent;
 using System.Windows.Threading;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Configuration;
 
 namespace FlickrSlideshow
 {
     public partial class MainWindow : Window
     {
+        private const uint EsContinuous = 0x80000000;
+        private const uint EsDisplayRequired = 0x00000002;
+        private const uint EsSystemRequired = 0x00000001;
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint SetThreadExecutionState(uint flags);
+
         private string ApiKey;
 
 
-        private FlickrService _flickr;
+        private FlickrService? _flickr;
         private List<FlickrPhoto> _photos = new();
-        private int _index;
         private bool _paused = false;
 
         // restore recent users list (was removed during refactor)
         private List<FlickrUser> _recentUsers = new();
 
-        // slideshow helper
-        private Slideshow _slideshow;
+        private XboxStyleSlideshow _slideshow;
 
         private bool _shuffle = true;
 
@@ -45,42 +51,39 @@ namespace FlickrSlideshow
             var version = asm?.GetName().Version;
             VersionText.Text = $"Version: {version?.ToString(3) ?? "unknown"}";
 
-            // load API key from settings
-            var config = new ConfigurationBuilder()
-                .SetBasePath(AppContext.BaseDirectory)
-                .AddJsonFile("appsettings.json", optional: false)
-                .Build();
+            using var settingsStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("FlickrSlideshow.Appsettings.json")
+                ?? throw new InvalidOperationException("Embedded Flickr configuration is missing.");
+            var config = new ConfigurationBuilder().AddJsonStream(settingsStream).Build();
+            ApiKey = config["Flickr:ApiKey"] ?? throw new InvalidOperationException("Flickr API key is missing.");
+            if (string.IsNullOrWhiteSpace(ApiKey))
+                throw new InvalidOperationException("Flickr API key is empty.");
 
-            ApiKey = config["Flickr:ApiKey"];
-
-
-#if DEBUG
-            DebugInfoText.Visibility = Visibility.Visible;
-#endif
-
-            // create slideshow with UI callback
-            _slideshow = new Slideshow(Dispatcher,
-                onShow: async (bitmap, url, title) =>
+            _slideshow = new XboxStyleSlideshow(
+                onShow: (bitmap, url, title) =>
                 {
-                    // update image source and start fade animation here
                     SlideImage.Source = bitmap;
-
-                    var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(2));
-                    SlideImage.BeginAnimation(OpacityProperty, fadeIn);
-
-                    // show title in bottom-left caption area
-                    CaptionText.Text = title ?? "No Title";
-
-                    await Task.CompletedTask;
+                    SlideImage.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromSeconds(1.5)));
+                    CaptionText.Text = title ?? "";
+                    DebugInfoText.Text = $"URL: {url}\nPixels: {bitmap.PixelWidth} x {bitmap.PixelHeight}";
+                    DebugInfoText.Visibility = DebugOutputCheckBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+                    return Task.CompletedTask;
                 },
-                onDebug: (url, bitmap) =>
+                onNotice: message =>
                 {
-#if DEBUG
-                    UpdateDebugInfo(url, bitmap);
-#endif
+                    RateLimitText.Text = message ?? "";
+                    RateLimitBanner.Visibility = message == null ? Visibility.Collapsed : Visibility.Visible;
                 },
-                httpClient: null // use default
-            );
+                onError: message => StatusText.Text = message);
+
+            _slideshow.SlideDurationSeconds = Math.Clamp(Properties.Settings.Default.SlideDurationSeconds, 15, 300);
+            _slideshow.DebugOutput = Properties.Settings.Default.DebugOutput;
+            SlideDurationValue.Text = _slideshow.SlideDurationSeconds.ToString();
+            DebugOutputCheckBox.IsChecked = _slideshow.DebugOutput;
+            Closed += (_, _) =>
+            {
+                _slideshow.Stop();
+                SetThreadExecutionState(EsContinuous);
+            };
 
             // Hook up editable ComboBox text changed
             UserComboBox.Loaded += (_, __) =>
@@ -187,6 +190,8 @@ namespace FlickrSlideshow
         {
             if (_photos.Count == 0) return;
 
+            _paused = false;
+            ResumeOverlay.Visibility = Visibility.Collapsed;
             _slideshow.Start(_photos, _shuffle);
         }
 
@@ -288,6 +293,44 @@ namespace FlickrSlideshow
             UpdateAddUserButtonState(tb.Text);
         }
 
+        private void RemoveUser_Click(object sender, RoutedEventArgs e)
+        {
+            if (UserComboBox.SelectedItem is not FlickrUser user) return;
+            _recentUsers.Remove(user);
+            Properties.Settings.Default.RecentUsers = JsonSerializer.Serialize(_recentUsers);
+            Properties.Settings.Default.LastUserId = "";
+            Properties.Settings.Default.Save();
+            UserComboBox.ItemsSource = null;
+            UserComboBox.ItemsSource = _recentUsers;
+            UserComboBox.Text = "";
+            _flickr = null;
+            AllPhotosButton.IsEnabled = false;
+            PickAlbumsButton.IsEnabled = false;
+            RemoveUserButton.IsEnabled = false;
+            UpdateAddUserButtonState(UserComboBox.Text);
+            StatusText.Text = $"Removed user: {user.Name}";
+        }
+
+        private void DebugOutput_Click(object sender, RoutedEventArgs e)
+        {
+            _slideshow.DebugOutput = DebugOutputCheckBox.IsChecked == true;
+            Properties.Settings.Default.DebugOutput = _slideshow.DebugOutput;
+            Properties.Settings.Default.Save();
+            DebugInfoText.Visibility = _slideshow.DebugOutput ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ChangeSlideDuration(int delta)
+        {
+            _slideshow.SlideDurationSeconds = Math.Clamp(_slideshow.SlideDurationSeconds + delta, 15, 300);
+            SlideDurationValue.Text = _slideshow.SlideDurationSeconds.ToString();
+            Properties.Settings.Default.SlideDurationSeconds = _slideshow.SlideDurationSeconds;
+            Properties.Settings.Default.Save();
+        }
+
+        private void SlideDurationDown_Click(object sender, RoutedEventArgs e) => ChangeSlideDuration(-5);
+        private void SlideDurationUp_Click(object sender, RoutedEventArgs e) => ChangeSlideDuration(5);
+        private void Quit_Click(object sender, RoutedEventArgs e) => Close();
+
         private async void AddUser_Click(object sender, RoutedEventArgs e)
         {
             if (!(UserComboBox.Template.FindName("PART_EditableTextBox", UserComboBox) is TextBox tb)) return;
@@ -353,6 +396,7 @@ namespace FlickrSlideshow
                 StatusText.Text = $"Selected user: {user.Name}";
                 AllPhotosButton.IsEnabled = true;
                 PickAlbumsButton.IsEnabled = true;
+                RemoveUserButton.IsEnabled = true;
 
                 // selection matches an existing recent user -> disable Add button
                 AddUserButton.IsEnabled = false;
@@ -373,6 +417,9 @@ namespace FlickrSlideshow
             AddUserButton.IsEnabled = false;
             AllPhotosButton.IsEnabled = false;
             PickAlbumsButton.IsEnabled = false;
+            ExploreButton.IsEnabled = false;
+            UserComboBox.IsEnabled = false;
+            RemoveUserButton.IsEnabled = false;
 
             // Progress reporter
             var progress = new Progress<int>(count =>
@@ -382,7 +429,15 @@ namespace FlickrSlideshow
 
             try
             {
-                _photos = await _flickr.GetAllPublicPhotos(progress);
+                var cacheKey = $"stream_{((FlickrUser)UserComboBox.SelectedItem).Id}";
+                var cached = PhotoCache.Load(cacheKey, TimeSpan.FromHours(24));
+                _photos = cached ?? await _flickr.GetAllPublicPhotos(progress);
+                if (_photos.Count == 0)
+                {
+                    StatusText.Text = "No photos found.";
+                    return;
+                }
+                if (cached == null) PhotoCache.Save(cacheKey, _photos);
                 StatusText.Text = $"Loaded {_photos.Count} photos!";
                 EnterFullScreen();
                 StartShow();
@@ -393,27 +448,34 @@ namespace FlickrSlideshow
             }
             finally
             {
-                AddUserButton.IsEnabled = true;
-                AllPhotosButton.IsEnabled = true;
-                PickAlbumsButton.IsEnabled = true;
+                UpdateAddUserButtonState(UserComboBox.Text);
+                AllPhotosButton.IsEnabled = UserComboBox.SelectedItem is FlickrUser;
+                PickAlbumsButton.IsEnabled = UserComboBox.SelectedItem is FlickrUser;
+                RemoveUserButton.IsEnabled = UserComboBox.SelectedItem is FlickrUser;
+                UserComboBox.IsEnabled = true;
+                ExploreButton.IsEnabled = true;
             }
         }
 
         private async void Explore_Click(object sender, RoutedEventArgs e)
         {
             _photos.Clear();
-            _shuffle = false;
+            _shuffle = true;
             StatusText.Text = "Loading Explore photos...";
             AddUserButton.IsEnabled = false;
             AllPhotosButton.IsEnabled = false;
             PickAlbumsButton.IsEnabled = false;
+            ExploreButton.IsEnabled = false;
+            UserComboBox.IsEnabled = false;
+            RemoveUserButton.IsEnabled = false;
 
             try
             {
                 // Flickr service WITHOUT user context
                 var exploreService = new FlickrService(ApiKey, "");
 
-                _photos = await exploreService.GetExplorePhotos(500);
+                var cached = PhotoCache.Load("explore", TimeSpan.FromHours(1));
+                _photos = cached ?? await exploreService.GetExplorePhotos(500);
 
                 if (_photos.Count == 0)
                 {
@@ -421,6 +483,7 @@ namespace FlickrSlideshow
                     return;
                 }
 
+                if (cached == null) PhotoCache.Save("explore", _photos);
                 StatusText.Text = $"Explore – {_photos.Count} photos";
                 EnterFullScreen();
                 StartShow();
@@ -431,9 +494,12 @@ namespace FlickrSlideshow
             }
             finally
             {
-                AddUserButton.IsEnabled = true;
-                AllPhotosButton.IsEnabled = true;
-                PickAlbumsButton.IsEnabled = true;
+                UpdateAddUserButtonState(UserComboBox.Text);
+                AllPhotosButton.IsEnabled = UserComboBox.SelectedItem is FlickrUser;
+                PickAlbumsButton.IsEnabled = UserComboBox.SelectedItem is FlickrUser;
+                RemoveUserButton.IsEnabled = UserComboBox.SelectedItem is FlickrUser;
+                UserComboBox.IsEnabled = true;
+                ExploreButton.IsEnabled = true;
             }
         }
 
@@ -442,21 +508,54 @@ namespace FlickrSlideshow
             if (_flickr == null) return;
 
             _shuffle = true;
-            var albums = await _flickr.GetAlbums();
-            albums.Sort((a, b) => string.Compare(a.Title, b.Title, StringComparison.CurrentCultureIgnoreCase));
-
-            // fetch collections so user can pick them as well
-            var collections = await _flickr.GetCollections();
-
-            var picker = new AlbumPicker(albums, collections);
-            if (picker.ShowDialog() == true)
+            var user = UserComboBox.SelectedItem as FlickrUser;
+            if (user == null) return;
+            AllPhotosButton.IsEnabled = false;
+            PickAlbumsButton.IsEnabled = false;
+            ExploreButton.IsEnabled = false;
+            UserComboBox.IsEnabled = false;
+            AddUserButton.IsEnabled = false;
+            RemoveUserButton.IsEnabled = false;
+            try
             {
-                EnterFullScreen();
+                StatusText.Text = "Loading albums...";
+                var albums = await _flickr.GetAlbums();
+                albums.Sort((a, b) => string.Compare(a.Title, b.Title, StringComparison.CurrentCultureIgnoreCase));
+                var collections = await _flickr.GetCollections();
+                var picker = new AlbumPicker(albums, collections) { Owner = this };
+                if (picker.ShowDialog() != true) return;
+
+                StatusText.Text = "Loading album photos...";
                 _photos.Clear();
                 foreach (var album in picker.SelectedAlbums)
-                    _photos.AddRange(await _flickr.GetAlbumPhotos(album.Id));
-
+                {
+                    var key = $"album_{user.Id}_{album.Id}";
+                    var cached = PhotoCache.Load(key, TimeSpan.FromHours(24));
+                    var photos = cached ?? await _flickr.GetAlbumPhotos(album.Id);
+                    if (cached == null && photos.Count > 0) PhotoCache.Save(key, photos);
+                    _photos.AddRange(photos);
+                }
+                if (_photos.Count == 0)
+                {
+                    StatusText.Text = "No photos found in the selected albums.";
+                    return;
+                }
+                StatusText.Text = $"Loaded {_photos.Count} photos!";
+                EnterFullScreen();
                 StartShow();
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = $"Error loading albums: {ex.Message}";
+            }
+            finally
+            {
+                AllPhotosButton.IsEnabled = UserComboBox.SelectedItem is FlickrUser;
+                PickAlbumsButton.IsEnabled = UserComboBox.SelectedItem is FlickrUser;
+                RemoveUserButton.IsEnabled = UserComboBox.SelectedItem is FlickrUser;
+                UserComboBox.IsEnabled = true;
+                ExploreButton.IsEnabled = true;
+                UpdateAddUserButtonState(UserComboBox.Text);
             }
         }
 
@@ -470,6 +569,8 @@ namespace FlickrSlideshow
             WindowStyle = WindowStyle.None;
             WindowState = WindowState.Maximized;
             Topmost = true;
+            if (SetThreadExecutionState(EsContinuous | EsDisplayRequired | EsSystemRequired) == 0)
+                StatusText.Text = "Could not keep the display awake during the slideshow.";
 
             // 🔑 FORCE KEYBOARD FOCUS
             Dispatcher.InvokeAsync(() =>
@@ -487,6 +588,8 @@ namespace FlickrSlideshow
             this.WindowStyle = WindowStyle.SingleBorderWindow;
             this.WindowState = WindowState.Normal;
             this.Topmost = false;
+            if (SetThreadExecutionState(EsContinuous) == 0)
+                StatusText.Text = "Could not release the display-awake request.";
         }
 
         #endregion
@@ -500,10 +603,12 @@ namespace FlickrSlideshow
             switch (e.Key)
             {
                 case Key.Escape:
-                    if (_photos.Count > 0 && _slideshow != null && _slideshow.IsRunning)
+                    if (TopControls.Visibility == Visibility.Collapsed || _paused)
                     {
-                        // Pause slideshow (keep image visible)
-                        SetPaused(true);
+                        _slideshow.Stop();
+                        _paused = false;
+                        ResumeOverlay.Visibility = Visibility.Collapsed;
+                        ExitFullScreen();
                     }
                     else
                     {
@@ -513,8 +618,8 @@ namespace FlickrSlideshow
                     break;
 
                 case Key.Space:
-                    // Toggle pause/resume and update UI consistently
-                    SetPaused(!_paused);
+                    if (_slideshow.IsRunning || _paused)
+                        SetPaused(!_paused);
                     e.Handled = true;
                     break;
 

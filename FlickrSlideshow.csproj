@@ -8,9 +8,18 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>flickr.ico</ApplicationIcon>
     <PlatformTarget>x64</PlatformTarget>
-    <Version>2.6.0.0</Version>
+    <Version>2.7.0.0</Version>
     <Platforms>AnyCPU;x64</Platforms>
     <IncludeSymbols>True</IncludeSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -22,11 +31,11 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <DebugType>full</DebugType>
+    <DebugType>none</DebugType>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <DebugType>full</DebugType>
+    <DebugType>none</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
@@ -88,10 +97,14 @@
     </Compile>
   </ItemGroup>
 
+  <Target Name="RemoveStandaloneCompanions" AfterTargets="ComputeFilesToPublish" Condition="'$(PublishSingleFile)'=='true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb' or '%(RelativePath)' == 'FlickrSlideshow.dll.config'" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
-    <None Update="Appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <EmbeddedResource Include="Appsettings.json" LogicalName="FlickrSlideshow.Appsettings.json" />
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
